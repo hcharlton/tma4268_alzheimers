@@ -1,0 +1,65 @@
+---
+title: "Compulsory Exercise 2: Prediction of Alzheimers Disease from Longitudinal MRI Data"
+author:
+- Chester Henry Charlton
+- Kasper Eikeland
+- Tinus Garshol
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes: \usepackage{amsmath}
+output:
+  # html_document:
+  #   toc: no
+  #   toc_depth: '2'
+  #   df_print: paged
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+urlcolor: blue
+abstract: "This is the place for your abstract (max 350 words)"
+---
+  
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.white=TRUE,prompt=FALSE,
+                      cache=TRUE, size="scriptsize",fig.width=4, fig.height=3,fig.align = "center")
+
+```
+
+```{r,eval=TRUE,echo=FALSE}
+library("knitr")
+library("rmarkdown")
+```
+
+```{r}
+setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
+```
+
+
+```{r}
+alzheimers.df <- read.csv("oasis_longitudinal.csv")
+head(alzheimers.df)
+```
+
+<!--  Henry's initial work here -->
+
+
+<!--  Kasper's initial work here. -->
+
+
+<!--  Tinus' initial work here. -->
+
+
+
+## Introduction: Scope and purpose of your project
+
+
+## Descriptive data analysis/statistics
+
+
+## Methods
+
+
+## Results and interpretation
+
+
+## Summary
