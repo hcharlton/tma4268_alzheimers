@@ -28,22 +28,56 @@ knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.wh
 ```{r,eval=TRUE,echo=FALSE}
 library("knitr")
 library("rmarkdown")
+library("dplyr")
+library("GGally")
 ```
 
 ```{r}
 setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
+setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
 ```
 
 
 ```{r}
-alzheimers.df <- read.csv("oasis_longitudinal.csv")
-head(alzheimers.df)
+longitudinal.df <- read.csv("oasis_longitudinal.csv")
+cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
 ```
 
 <!--  Henry's initial work here -->
 
 
 <!--  Kasper's initial work here. -->
+```{r}
+cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
+
+# Patient is demented if CDR is > 0
+cs_mutated <- cross_sectional.df %>%
+  select(c(M.F, eTIV, nWBV, ASF, Age, CDR)) %>%
+  na.omit() %>%
+  mutate(Demented = as.numeric(CDR>0))
+
+longitudinal.df <- read.csv("oasis_longitudinal.csv")
+
+longitudinal_deltas <- longitudinal.df %>% 
+  group_by(Subject.ID) %>%
+  summarise(dMMSE = last(MMSE) - first(MMSE), 
+            deTIV = last(eTIV) - first(eTIV),
+            dnWBV = last(nWBV) - first(nWBV),
+            dASF = last(ASF) - first(ASF),
+            dAge = last(Age) - first(Age))
+
+baseline_with_deltas <- longitudinal.df %>%
+  filter(Visit == 1) %>%
+  left_join(longitudinal_deltas, by = c("Subject.ID")) %>%
+  mutate(Demented = as.numeric(Group != "Nondemented")) %>% # Those who converted became demented
+  select(-c(Subject.ID, MRI.ID, Group, Visit, MR.Delay, Hand)) 
+  
+# cross-sectional data
+ggpairs(cs_mutated)
+
+# longitudinal data
+ggpairs(baseline_with_deltas)
+```
 
 
 <!--  Tinus' initial work here. -->
