@@ -34,14 +34,19 @@ library("formatR")
 ```
 
 ```{r}
-#setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
-setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
+setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
+# setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
 ```
 
 
 ```{r}
 longitudinal.df <- read.csv("oasis_longitudinal.csv")
 cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
+
+alzheimers.df <- read.csv("oasis_longitudinal.csv")
+alzheimers.df$Group <-as.factor(alzheimers.df$Group)
+alzheimers.df.working <- alzheimers.df[,-c(2,)]
+tail(alzheimers.df,30)
 ```
 
 <!--  Henry's initial work here -->
