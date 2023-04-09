@@ -28,19 +28,57 @@ knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.wh
 ```{r,eval=TRUE,echo=FALSE}
 library("knitr")
 library("rmarkdown")
+library(GGally)
 ```
 
 ```{r}
-setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
+setwd("/Users/chcharlton/NTNU/statLearning/tma4268_alzheimers")
 ```
 
 
 ```{r}
 alzheimers.df <- read.csv("oasis_longitudinal.csv")
-head(alzheimers.df)
+alzheimers.df$Group <-as.factor(alzheimers.df$Group)
+alzheimers.df.working <- alzheimers.df[,-c(2,)]
+tail(alzheimers.df,30)
 ```
 
 <!--  Henry's initial work here -->
+NB: here is the link to the article describing this data in detail: https://direct.mit.edu/jocn/article/22/12/2677/4983/Open-Access-Series-of-Imaging-Studies-Longitudinal
+how about adding some CV plots, Cp, BIC, something like that. 
+
+```{r}
+# select some quantitative data and plot the pairs of it
+pairwise_scatter_data <- alzheimers.df[,c("Age", "EDUC", "MMSE", 
+                                   "eTIV", "nWBV", "ASF")]
+ggpairs(data=pairwise_scatter_data)
+```
+```{r}
+# make some box plots on CDR
+par(mfrow=c(2,4))  
+boxplot(Age~CDR,data=alzheimers.df)
+boxplot(EDUC~CDR,data=alzheimers.df)
+boxplot(SES~CDR,data=alzheimers.df)
+boxplot(MMSE~CDR,data=alzheimers.df)
+boxplot(eTIV~CDR,data=alzheimers.df)
+boxplot(nWBV~CDR,data=alzheimers.df)
+boxplot(ASF~CDR,data=alzheimers.df)
+
+# make some box plots on Group
+par(mfrow=c(2,3))   
+boxplot(Age~Group,data=alzheimers.df)
+boxplot(EDUC~Group,data=alzheimers.df)
+boxplot(MMSE~Group,data=alzheimers.df)
+boxplot(eTIV~Group,data=alzheimers.df)
+boxplot(nWBV~Group,data=alzheimers.df)
+boxplot(ASF~Group,data=alzheimers.df)
+
+```
+
+
+
+
+
 
 
 <!--  Kasper's initial work here. -->
@@ -49,11 +87,24 @@ head(alzheimers.df)
 <!--  Tinus' initial work here. -->
 
 
-
 ## Introduction: Scope and purpose of your project
 
 
 ## Descriptive data analysis/statistics
+### Description of Data Types:
+Group: The group that the patient was classified in at the across the various scans. Possible values are "Undemented," denoting a patient without symptoms of dementia throughout all scans, "Demented" denoting a patient with symptoms of dementia accross all scans, or "Converted," denoting someone who began without symptoms of dementia but developed them at a further scan. 
+Visit: The order of the visit in which the scan was done, indexed from 1. 
+MR Delay: The number of days since the previous scan. Marked as 0 for the initial scan.
+M.F: Categorical variable for male or female patients at birth. M denotes male, F denotes female. 
+Hand: The patient's dominant hand. All of the patients were right-handed. 
+EDUC: The education level of the patient, measured in years (including elementary school). 
+SES: "Socioeconomic status as assessed by the Hollingshead Index of Social Position and classified into categories from 1 (highest status) to 5 (lowest status) (Hollingshead, 1957)"
+MMSE: "Mini-Mental State Examination score (range is from 0 = worst to 30 = best) (Folstein, Folstein, & McHugh, 1975)"
+CDR: "Clinical Dementia Rating (0 = no dementia, 0.5 = very mild AD, 1 = mild AD, 2 = moderate AD) (Morris, 1993)"
+ASF: "Atlas scaling factor (unitless). Computed scaling factor that transforms native-space brain and skull to the atlas target (i.e., the determinant of the transform matrix) (Buckner et al., 2004)"
+eTIV: "Estimated total intracranial volume (cm3) (Buckner et al., 2004)"
+nWBV: "Normalized whole-brain volume, expressed as a percent of all voxels in the atlas-masked image that are labeled as gray or white matter by the automated tissue segmentation process (Fotenos et al., 2005)"
+
 
 
 ## Methods
