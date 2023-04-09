@@ -151,7 +151,6 @@ table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
 # Logistic
 longitudinal.logistic <- glm(Demented ~., family = binomial, data = longitudinal.train)
 logistic.probs <- predict(longitudinal.logistic, newdata = longitudinal.test, type = "response")
-y
 yhat.logistic <- ifelse(logistic.probs > .5, 1,0)
 table(pred = yhat.logistic, truth = longitudinal.test$Demented) # 0.8648649
 
@@ -162,7 +161,10 @@ table(pred = yhat.logistic, truth = longitudinal.test$Demented) # 0.8648649
 # SVM
 library("e1071")
 
-longitudinal.svm <- svm(Demented ~ ., data = longitudinal.train)
+longitudinal.svm <- svm(Demented ~ ., data = longitudinal.train, kernel = "linear")
+yhat.svm <- predict(longitudinal.svm, newdata = longitudinal.test)
+table(pred = yhat.svm, truth = longitudinal.test$Demented) # 0.8648649
+
 
 ```
 
