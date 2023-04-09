@@ -80,7 +80,7 @@ boxplot(nWBV~Group,data=alzheimers.df)
 boxplot(ASF~Group,data=alzheimers.df)
 
 ```
-
+<!--  Goal: predict whether someone will get Alzheimers -->
 
 
 
