@@ -119,7 +119,6 @@ table(yhat.bag, longitudinal.test$Demented) # 0.8648649
 ```
 
 
-
 ```{r}
 # Random forest
 longitudinal.rf <- randomForest(Demented ~., longitudinal.train, importance = TRUE)
@@ -140,6 +139,40 @@ longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented 
 yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 1000, type = "response")
 yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
 table(yhat.boost, longitudinal.test.boost$Demented)
+```
+
+
+```{r}
+# Logistic
+
+
+```
+
+
+```{r}
+# SVM
+
+```
+
+
+```{r}
+# LDA
+
+
+```
+
+
+```{r}
+# QDA
+
+
+```
+
+
+```{r}
+# KNN
+
+
 ```
 
 
