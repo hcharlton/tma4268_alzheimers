@@ -5,6 +5,12 @@
 # Mac location files
 .DS_Store
 
+#report images
+.png
+
+#report folder
+report_files
+
 # Session Data files
 .RData
 
