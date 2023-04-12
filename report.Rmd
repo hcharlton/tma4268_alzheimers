@@ -20,7 +20,6 @@ abstract: "This is the place for your abstract (max 350 words)"
   
 ```{r setup, include=FALSE}
 library("knitr")
-knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.white=TRUE,prompt=FALSE,
                       cache=TRUE, size="scriptsize",fig.width=4, fig.height=3,fig.align = "center")
 
 ```
@@ -36,6 +35,8 @@ library("formatR")
 ```{r}
 #setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
 setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
+#setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
+setwd("C:/Users/tinus/OneDrive/Desktop/GitHub/tma4268_alzheimers")
 ```
 
 
@@ -49,7 +50,6 @@ cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
 
 <!--  Kasper's initial work here. -->
 ```{r}
-cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
 
 # Patient is demented if CDR is > 0
 cs_mutated <- cross_sectional.df %>%
@@ -144,6 +144,11 @@ longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented 
 yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 5000, type = "response")
 yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
 table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
+=======
+yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 1000, type = "response")
+yhat.boost <- ifelse(yhat.boost > 0.5, 1,0) # nolint
+table(yhat.boost, longitudinal.test.boost$Demented)
+>>>>>>> Stashed changes
 ```
 
 
@@ -165,7 +170,65 @@ longitudinal.svm <- svm(Demented ~ ., data = longitudinal.train, kernel = "linea
 yhat.svm <- predict(longitudinal.svm, newdata = longitudinal.test)
 table(pred = yhat.svm, truth = longitudinal.test$Demented) # 0.8648649
 
+=======
+install.packages("e1071")
+library("e1071")
+>>>>>>> Stashed changes
 
+# Linear kernel
+lin.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=10)
+lin.svm.predict <- predict(lin.svm,newdata=longitudinal.test,type="class")
+table(lin.svm.predict,longitudinal.test$Demented)
+
+# Polynomial kernel
+pol.svm <-svm(Demented~.,data=longitudinal.train,kernel="polynomial",cost=10)
+pol.svm.predict <- predict(pol.svm,newdata=longitudinal.test,type="class")
+table(pol.svm.predict,longitudinal.test$Demented)
+
+# Radial kernel
+rad.svm <-svm(Demented~.,data=longitudinal.train,kernel="radial",cost=10)
+rad.svm.predict <- predict(rad.svm,newdata=longitudinal.test,type="class")
+table(rad.svm.predict,longitudinal.test$Demented)
+
+# Sigmoid kernel
+sig.svm <-svm(Demented~.,data=longitudinal.train,kernel="sigmoid",cost=10)
+sig.svm.predict <- predict(sig.svm,newdata=longitudinal.test,type="class")
+table(sig.svm.predict,longitudinal.test$Demented)
+
+# Testing the different kernels for different costs "C"
+
+C = c(1:20)
+miss_lin = c()
+miss_pol = c()
+miss_rad = c()
+miss_sig = c()
+for (i in 1:length(C)) {
+  test_lin.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=C[i])
+  test_pol.svm <- svm(Demented~.,data=longitudinal.train,kernel="polynomial",cost=C[i])
+  test_rad.svm <- svm(Demented~.,data=longitudinal.train,kernel="radial",cost=C[i])
+  test_sig.svm <- svm(Demented~.,data=longitudinal.train,kernel="sigmoid",cost=C[i])
+  test_lin.svm.predict <- predict(test_lin.svm,newdata=longitudinal.test,type="class")
+  test_pol.svm.predict <- predict(test_pol.svm,newdata=longitudinal.test,type="class")
+  test_rad.svm.predict <- predict(test_rad.svm,newdata=longitudinal.test,type="class")
+  test_sig.svm.predict <- predict(test_sig.svm,newdata=longitudinal.test,type="class")
+  tab_lin <- table(test_lin.svm.predict,longitudinal.test$Demented)
+  tab_pol <- table(test_pol.svm.predict,longitudinal.test$Demented)
+  tab_rad <- table(test_rad.svm.predict,longitudinal.test$Demented)
+  tab_sig <- table(test_sig.svm.predict,longitudinal.test$Demented)
+  miss_lin <- c(miss_lin,tab_lin[1,2]+tab_lin[2,1])
+  miss_pol <- c(miss_pol,tab_pol[1,2]+tab_pol[2,1])
+  miss_rad <- c(miss_rad,tab_rad[1,2]+tab_rad[2,1])
+  miss_sig <- c(miss_sig,tab_sig[1,2]+tab_sig[2,1])
+}
+plot(C,miss_lin)
+plot(C,miss_pol)
+plot(C,miss_rad)
+plot(C,miss_sig)
+
+long.svm <- svm(Demented~.,data=longitudinal.train)
+long.svm.predict <- predict(long.svm,newdata=longitudinal.test,type="class")
+table(long.svm.predict,longitudinal.test$Demented)
+summary(long.svm)
 ```
 
 
