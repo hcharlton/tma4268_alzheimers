@@ -52,7 +52,7 @@ cs.mutated <- cross_sectional.df %>%
   na.omit() %>%
   mutate(Demented = as.factor(CDR>0),
          M.F = as.factor(M.F)) %>%
-  dplyr::select(c(M.F, eTIV, nWBV, ASF, Age, Demented)) %>%
+  dplyr::select(c(M.F, eTIV, nWBV, ASF, Age, Demented))
 
 
 longitudinal.df <- read.csv("oasis_longitudinal.csv")
