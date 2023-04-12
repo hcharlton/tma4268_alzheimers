@@ -39,11 +39,6 @@ setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma
 ```
 
 
-```{r}
-longitudinal.df <- read.csv("oasis_longitudinal.csv")
-cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
-```
-
 <!--  Henry's initial work here -->
 
 
@@ -52,7 +47,7 @@ cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
 cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
 
 # Patient is demented if CDR is > 0
-cs_mutated <- cross_sectional.df %>%
+cs.mutated <- cross_sectional.df %>%
   dplyr::select(c(M.F, eTIV, nWBV, ASF, Age, CDR)) %>%
   na.omit() %>%
   mutate(Demented = as.factor(CDR>0),
@@ -75,11 +70,17 @@ baseline_with_deltas <- longitudinal.df %>%
          M.F = as.factor(M.F)) %>% 
   dplyr::select(-c(Subject.ID, MRI.ID, Group, Visit, MR.Delay, Hand, CDR, SES)) 
   
-# cross-sectional data
-ggpairs(cs_mutated)
+set.seed(1337)
 
-# longitudinal data
-ggpairs(baseline_with_deltas)
+# Longitudinal data
+l.train.indeces <- sample(1:nrow(baseline_with_deltas), floor(.75 * nrow(baseline_with_deltas)))
+longitudinal.train <- na.omit(baseline_with_deltas[l.train.indeces,])
+longitudinal.test <- na.omit(baseline_with_deltas[-l.train.indeces,])
+
+# Cross-sectional
+cs.train.indeces <- sample(1:nrow(cs.mutated), floor(.75 * nrow(cs.mutated)))
+cs.train <- na.omit(cs.mutated[cs.train.indeces,])
+cs.test <- na.omit(cs.mutated[-cs.train.indeces,])
 ```
 
 ```{r}
@@ -88,11 +89,6 @@ library("gbm")
 library("randomForest")
 
 
-set.seed(1337)
-# Longitudinal data
-train <- sample(1:nrow(baseline_with_deltas), floor(.75 * nrow(baseline_with_deltas)))
-longitudinal.train <- na.omit(baseline_with_deltas[train,])
-longitudinal.test <- na.omit(baseline_with_deltas[-train,])
 ```
 
 
