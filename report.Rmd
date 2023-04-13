@@ -20,6 +20,7 @@ abstract: "This is the place for your abstract (max 350 words)"
   
 ```{r setup, include=FALSE}
 library("knitr")
+knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.white=TRUE,prompt=FALSE, # nolint
                       cache=TRUE, size="scriptsize",fig.width=4, fig.height=3,fig.align = "center")
 
 ```
@@ -34,7 +35,6 @@ library("formatR")
 
 ```{r}
 #setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
-setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
 #setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
 setwd("C:/Users/tinus/OneDrive/Desktop/GitHub/tma4268_alzheimers")
 ```
@@ -141,6 +141,7 @@ longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost,
                           distribution = "bernoulli", n.trees = 5000, interaction.depth = 2)
 summary(longitudinal.boost)
 longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented == "FALSE", 0,1))
+<<<<<<< Updated upstream
 yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 5000, type = "response")
 yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
 table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
@@ -164,16 +165,8 @@ table(pred = yhat.logistic, truth = longitudinal.test$Demented) # 0.8648649
 
 ```{r}
 # SVM
-library("e1071")
-
-longitudinal.svm <- svm(Demented ~ ., data = longitudinal.train, kernel = "linear")
-yhat.svm <- predict(longitudinal.svm, newdata = longitudinal.test)
-table(pred = yhat.svm, truth = longitudinal.test$Demented) # 0.8648649
-
-=======
 install.packages("e1071")
 library("e1071")
->>>>>>> Stashed changes
 
 # Linear kernel
 lin.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=10)
@@ -229,6 +222,9 @@ long.svm <- svm(Demented~.,data=longitudinal.train)
 long.svm.predict <- predict(long.svm,newdata=longitudinal.test,type="class")
 table(long.svm.predict,longitudinal.test$Demented)
 summary(long.svm)
+
+
+
 ```
 
 
@@ -260,7 +256,11 @@ table(pred = yhat.qda, truth = longitudinal.test$Demented) # 0.8648649
 
 
 ## Descriptive data analysis/statistics
+```{r}
+summary(baseline_with_deltas)
 
+hist(baseline_with_deltas$Demented~baseline_with_deltas$dAge)
+```
 
 ## Methods
 
