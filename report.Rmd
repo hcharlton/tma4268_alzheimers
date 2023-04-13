@@ -93,148 +93,74 @@ library("randomForest")
 
 
 ```{r}
-# Longitudinal
-# Classification tree
-set.seed(1337)
-longitudinal.tree <- tree(Demented ~., longitudinal.train)
-summary(longitudinal.tree)
-plot(longitudinal.tree)
-text(longitudinal.tree, pretty = 0)
-
-# Test predictions
-pred.tree <- predict(longitudinal.tree, newdata=longitudinal.test, type = "class")
-table(pred = pred.tree, truth = longitudinal.test$Demented) # 0.7837838
-
-# Pruning
-longitudinal.cv <- cv.tree(longitudinal.tree, FUN = prune.misclass)
-longitudinal.cv
-# Seems 7 leaves give the minimum amount of misclassifications of the training data
-par (mfrow = c(1, 2))
-plot (longitudinal.cv$size , longitudinal.cv$dev, type = "b")
-plot (longitudinal.cv$k, longitudinal.cv$dev, type = "b")
-
-longitudinal.prune <- prune.misclass(longitudinal.tree , best = 7)
-plot(longitudinal.prune)
-text(longitudinal.prune, pretty = 0)
-
-pred.prune <- predict(longitudinal.prune, newdata=longitudinal.test, type = "class")
-table(pred = pred.prune, truth = longitudinal.test$Demented) # 0.7837838
-
-# Lower accuracy, more interperateable since fewer decisions to make
-```
-
-```{r}
-# Cross sectional
-# Classification tree
-set.seed(1337)
-cs.tree <- tree(Demented ~., cs.train)
-summary(cs.tree)
-plot(cs.tree)
-text(cs.tree, pretty = 0)
-
-# Test predictions
-pred.tree <- predict(cs.tree, newdata=cs.test, type = "class")
-table(pred = pred.tree, truth = cs.test$Demented) # 0.7837838
-
-# Pruning
-cs.cv <- cv.tree(cs.tree, FUN = prune.misclass)
-cs.cv
-# Seems 7 leaves give the minimum amount of misclassifications of the training data
-par (mfrow = c(1, 2))
-plot (cs.cv$size , cs.cv$dev, type = "b")
-plot (cs.cv$k, cs.cv$dev, type = "b")
-
-cs.prune <- prune.misclass(cs.tree , best = 2)
-plot(cs.prune)
-text(cs.prune, pretty = 0)
-
-pred.prune <- predict(cs.prune, newdata=cs.test, type = "class")
-table(pred = pred.prune, truth = cs.test$Demented) # 0.7837838
-
-# Lower accuracy, more interperateable since fewer decisions to make
-```
-
-```{r}
-# Bagging, longitudinal
-set.seed(1337)
-longitudinal.bag <- randomForest(Demented ~., longitudinal.train, mtry = 12, importance = TRUE)
-summary(longitudinal.bag)
-plot(longitudinal.bag)
-yhat.bag <- predict(longitudinal.bag, newdata = longitudinal.test, type = "class")
-table(pred = yhat.bag, truth = longitudinal.test$Demented) # 0.8648649
-
-# Importance of variables 
-varImpPlot(longitudinal.bag)
-```
-
-```{r}
-# Bagging, cross-sectional
-set.seed(1337)
-cs.bag <- randomForest(Demented ~., cs.train, mtry = 5, importance = TRUE)
-summary(cs.bag)
-plot(cs.bag)
-yhat.bag <- predict(cs.bag, newdata = cs.test, type = "class")
-table(pred = yhat.bag, truth = cs.test$Demented) # 0.8648649
-
-# Importance of variables 
-varImpPlot(cs.bag)
-```
-
-
-```{r}
-# Random forest, longitudinal
-set.seed(1337)
-longitudinal.rf <- randomForest(Demented ~., longitudinal.train, importance = TRUE)
-summary(longitudinal.rf)
-plot(longitudinal.rf)
-yhat.rf <- predict(longitudinal.rf, newdata = longitudinal.test, type = "class")
-table(pred = yhat.rf, truth = longitudinal.test$Demented) # 0.8108108
-
-# Importance
-varImpPlot(longitudinal.rf)
-# dAge seems to be important??
-```
-
-```{r}
-# Random forest, cross-sectional
-set.seed(1337)
-cs.rf <- randomForest(Demented ~., cs.train, importance = TRUE)
-summary(cs.rf)
-plot(cs.rf)
-yhat.rf <- predict(cs.rf, newdata = cs.test, type = "class")
-table(pred = yhat.rf, truth = cs.test$Demented) # 0.8108108
-
-# Importance
-varImpPlot(cs.rf)
-# dAge seems to be important??
-```
-
-```{r}
 # Boosting, longitudinal
 set.seed(1337)
+
+# gbm wants response in {0,1}
 longitudinal.train.boost <- mutate(longitudinal.train, Demented = ifelse(Demented == "FALSE", 0,1))
-longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost, 
-                          distribution = "bernoulli", n.trees = 5000, interaction.depth = 2)
-summary(longitudinal.boost)
-longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented == "FALSE", 0,1))
-yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 5000, type = "response")
-yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
-table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
 ```
+
+
+
+### Feature selection sensitivity test
+Quick test to see if the feature selection is sensitive to the choice of parameters.
+```{r}
+# Feature selection sensitivity test
+library("stepgbm")
+
+trainx <- select(longitudinal.train.boost, -Demented)
+trainy <- longitudinal.train.boost$Demented
+
+# n.trees = 1000, 5000
+# interaction.depth = 1, 2
+
+feature.selection.boost <- stepgbm(trainx, trainy, family = "bernoulli",
+                                   n.trees = 3000, learning.rate = 0.001,
+                                   interaction.depth = 2, cv.fold = 10,
+                                   rseed = 1337)
+
+
+longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost, 
+                          distribution = "bernoulli", n.trees = 5000, 
+                          interaction.depth = 2)
+
+```
+
+
+### Feature selection
+We fix a set of parameters and find the best subset of features given these parameter values, chosen with AIC.
 
 ```{r}
-# Boosting, cross-sectional
-set.seed(1337)
-cs.train.boost <- mutate(cs.train, Demented = ifelse(Demented == "FALSE", 0,1))
-cs.boost <- gbm(Demented ~., data = cs.train.boost, 
-                          distribution = "bernoulli", n.trees = 5000, interaction.depth = 2)
-summary(cs.boost)
 
-cs.test.boost <- mutate(cs.test, Demented = ifelse(Demented == "FALSE", 0,1))
-yhat.boost <- predict(cs.boost, newdata = cs.test.boost, n.trees = 5000, type = "response")
-yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
-table(pred = yhat.boost, truth = cs.test.boost$Demented) # 0.8648649
 ```
+
+
+### Paramter tuning
+Now we tune the parameters to the chosen subset of predictors with K-fold cross validation. 
+
+```{r}
+
+```
+
+This is all like a greedy algorithm for finding the best model out of all possible models by reducing the search space
+
+
+
+Now that we have the best boosted model out of all the 
+### CV each method
+
+### Result
+```{r}
+longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented == "FALSE", 0,1))
+
+yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, 
+                      n.trees = 5000, type = "response")
+yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
+table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
+
+```
+
+
 
 <!--  Tinus' initial work here. -->
 
