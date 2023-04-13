@@ -33,6 +33,8 @@ library("dplyr")
 library("GGally")
 library("tidyr")
 library("formatR")
+library('DiagrammeR')
+library('bestglm')
 ```
 
 ## The block below is specific to Henry's Computer
@@ -80,6 +82,7 @@ cs.test <- na.omit(cs.mutated[-cs.train.indices,])
 ## Logistic regression
 
 ```{r}
+# model creation on training set
 # logistic regression on longitudinal data
 longitudinal.logistic <-  glm(Demented ~ . - dMMSE - MMSE, data = longitudinal.train, family = binomial)
 longitudinal.logistic.probs <- predict(longitudinal.logistic, newdata = longitudinal.test, type = "response")
@@ -114,26 +117,149 @@ longitudinal.logistic.pred true 0 true 1
      (sens)    (spec)
 
 
+
+
+## Model selection
+
+
+
+### using bestglm and just BIC
+
 ```{r}
-# logistic regression on cross-sectional data
-cs.logistic <-  glm(Demented ~ ., data = cs.train, family = binomial)
-cs.logistic.probs <- predict(cs.logistic, newdata = cs.test, type = "response")
-cs.logistic.pred <- ifelse(cs.logistic.probs > 0.5, 1, 0)
+# longitudinal subset selection
+longitudinal.best.bic <- bestglm(longitudinal.train, family = binomial, IC = "BIC")
+longitudinal.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
 
-cs.logistic.confusion <- table(cs.logistic.pred, cs.test$Demented)
-rownames(cs.logistic.confusion) <- c('pred 0','pred 1')
-colnames(cs.logistic.confusion) <- c('true 0','true 1')
+# get residuals for best model
+longitudinal.best.bic.errors <- resid(longitudinal.best.bic$BestModel)
+longitudinal.best.aic.errors <- resid(longitudinal.best.aic$BestModel)
 
-cs.logistic.sens <- cs.logistic.confusion[2,2] / sum(cs.logistic.confusion[,2])
-cs.logistic.spec <- cs.logistic.confusion[1,1] / sum(cs.logistic.confusion[,1])
-cs.logistic.vals = c(cs.logistic.sens, cs.logistic.spec)
+# get subset tables (for a given number of variables, which ones are best)
+longitudinal.bic.subsets <- 
+  longitudinal.best.bic$Subsets %>% 
+  data.frame() %>% 
+  cbind(variables = 1:nrow(longitudinal.bic.subsets))
+  
+longitudinal.aic.subsets <- 
+  longitudinal.best.aic$Subsets %>% 
+  data.frame() %>% 
+  cbind(variables = 1:nrow(longitudinal.aic.subsets))
 
-cs.logistic.confusion
-cs.logistic.vals
+qqnorm(longitudinal.best.bic.errors, ylab = "Longitudinal Best BIC Residuals")
+qqnorm(longitudinal.best.aic.errors, ylab = "Longitudinal Best AIC Residuals")
+
+
+```
+
+```{r}
+
+longitudinal.bic.subsets.plot <- 
+  ggplot(longitudinal.bic.subsets, aes(x = variables, y = BIC)) +
+  geom_point(color = "hotpink", shape = 'X', size = 4) +
+  ggtitle("Longitudinal BIC Subset Selection") +
+  labs(x = "Variables", y = "BIC") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  theme_minimal() 
+
+
+longitudinal.aic.subsets.plot <- 
+  ggplot(longitudinal.aic.subsets, aes(x = variables, y = AIC)) +
+  geom_point(color = "chartreuse4", shape = "X", size = 4) +
+  ggtitle("Longitudinal AIC Subset Selection") +
+  labs(x = "Variables", y = "AIC") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  theme_minimal() 
 ```
 
 
-Note: The sensitivity for our cross-sectional logistic model is terrible compared to the longitudinal logistic model. I hypothesize that this is due to the lack of temporal data. To test this I removed the deltas and this resulted in a MUCH worse performance, indicating that my hypothesis was at least partially correct. 
+## plotting the master-diagram
+
+```{r}
+mermaid("
+graph TD
+    start[source data]
+    process[processed data]
+    start --> process[processed data]
+    process --> a0
+    process --> a1
+
+
+    a0 -->  b0 
+    a0 -->  b1 
+    a0 -->  b2
+    a0[training data]
+    a1[test data]
+    b0[SVM]
+    b1[Boosting]
+    b2[Logistic]
+    c0[subsetted SVM]
+    c1[subsetted Boosting]
+    
+    d0[best SVM]
+    d1[best Boosting]
+    d2[best Logistic]
+    
+    e0[best model selection]
+    
+    b0 --> |feat param sensitivity| c0
+    b1 --> |feat param sensitivity| c1
+    b2 --> |feature selection| d2
+    
+    c0 --> |parameter tuning| d0
+    c1 --> |parameter tuning| d1
+    
+
+
+
+    a1 --> e0
+    d0 --> e0
+    d1 --> e0
+    d2 --> e0
+    
+    e0 --> final[interpretation]
+    
+
+    
+")
+```
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [overlap = true, fontsize = 10]
+
+  # several 'node' statements
+  node [shape = box,
+        fontname = Helvetica]
+  A; B; C; D; E; F
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.9] // sets as circles
+  1; 2; 3; 4; 5; 6; 7; 8
+
+  # several 'edge' statements
+  A->1 B->2 B->3 B->4 C->A
+  1->D E->A 2->4 1->5 1->F
+  E->6 4->6 5->7 6->7 3->8
+}
+")
+```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -185,6 +311,21 @@ whether to include MMSE: Seems like it is objective, and only takes a few minute
 whether having an high specificity or sensitivity is more important: what is worse: (1) someone who truly does not have alzheimer's being told they do, or (2) someone who truly does have alzheimer's being told they don't? If (1): 
 
 
+overall strategy like Kasper drew:
+treat the entire process as model selection. separate test and training data. Set aside test data until we choose a final best model based on the training data.  train models on training data, setting an arbitrary set of parameters -> perform a rough sensitivity analysis for the effect of parameters on the feature selection -> choose arbitrary parameters -> perform feature selection, choosing best set of features -> tune parameters for the model with best feature set -> evaluate all three models with k-fold cv in parallel -> select best model -> 
+
 
 
 ## Summary
+
+
+
+
+
+
+
+
+
+
+
+
