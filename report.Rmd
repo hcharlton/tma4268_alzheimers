@@ -182,7 +182,7 @@ sig.svm <-svm(Demented~.,data=longitudinal.train,kernel="sigmoid",cost=10)
 sig.svm.predict <- predict(sig.svm,newdata=longitudinal.test,type="class")
 table(sig.svm.predict,longitudinal.test$Demented)
 
-# Testing the different kernels for different costs "C"
+# Testing for different costs "C"
 
 C = c(1:20)
 accuracy = c()
@@ -195,6 +195,15 @@ long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=14)
 long.predict.svm <- predict(long.svm, newdata=longitudinal.test,type="class")
 table(long.predict.svm,longitudinal.test$Demented)
 
+
+C = c(1:20)
+accuracy = c()
+for (i in 1:length(C)) {
+  cross.svm <- svm(Demented~.,data=cs.train,kernel="linear",cost=C[i],cross=10)
+  accuracy <- c(accuracy,cross.svm[29])
+}
+plot(C,accuracy)
+print(accuracy)
 ```
 
 
