@@ -114,15 +114,82 @@ trainy <- longitudinal.train.boost$Demented
 # n.trees = 1000, 5000
 # interaction.depth = 1, 2
 
-feature.selection.boost <- stepgbm(trainx, trainy, family = "bernoulli",
-                                   n.trees = 3000, learning.rate = 0.001,
-                                   interaction.depth = 2, cv.fold = 10,
+feature.selection.boost <- stepgbm(trainx, trainy, 
+                                   family = "bernoulli",
+                                   n.trees = 3000, 
+                                   learning.rate = 0.1,
+                                   interaction.depth = 2, 
+                                   cv.fold = 10,
+                                   rseed = 1337, 
+                                   keep.data = TRUE)
+
+feature.selection.boost <- stepgbm(trainx, trainy, 
+                                   method = "KIRVI", 
+                                   family = "bernoulli", 
+                                   rpt = 2,
+                                   predacc = "VEcv",
+                                   cv.fold = 5,
+                                   min.n.var = 2,
+                                   n.cores = 2,
+                                   delta.predacc = 0.01,
                                    rseed = 1337)
 
+feature.selection.boost <- stepgbmRVI(trainx, trainy, 
+                                      family = "bernoulli", 
+                                      n.trees = 100, 
+                                      interaction.depth = 2, 
+                                      learning.rate = 0.01, 
+                                      cv.fold = 5, 
+                                      n.cores = 2, 
+                                      min.n.var = 1, 
+                                      rseed = 1234)
 
 longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost, 
-                          distribution = "bernoulli", n.trees = 5000, 
+                          distribution = "bernoulli", n.trees = 2000, 
                           interaction.depth = 2)
+
+# backwards feature selection
+
+backwards.gbm <- function(trainx, trainy, B, d, shrinkage) {
+  # Step 1
+  M_p <- gbm(trainy ~ ., data = trainx, distribution = "bernoulli", n.trees = B, interaction.depth = d, shrinkage = shrinkage) # full model
+  
+  # Step 2
+  M_k_list <- data.frame(predictors = rep(0, ncol(trainx)), misclass_rate = rep(0, ncol(trainx)))
+  
+  predictors_k <- c(1:ncol(trainx)) # start with all predictors
+  for (k in ncol(trainx):2) { # iterate backwards
+    # Consider all k models that contain all but one of the predictors in M_k for a total of k-1 predictors
+
+    results_k.df <- data.frame(predictors = I(rep(list(rep(0,k-1)), k)), 
+                               misclass_rate = rep(0, k)) # k rows, 2 columns, first column is which predictors
+    
+    for (j in 1:k) { # iterate through predictors_k
+      current_predictors <- predictors_k[-j]  # exclude jth predictor
+      
+      M_k_tmp <- gbm(trainy ~ ., data = select(trainx, current_predictors),
+                     distribution = "bernoulli", n.trees = B, interaction.depth = d, 
+                     shrinkage = shrinkage) # fit model with current selection of predictors
+      
+      # save training loss and corresponding predictors in a list or something
+      results_k.df$predictors[j] <- list(current_predictors)
+      results_k.df$misclass_rate[j] <- sum(as.numeric(predict(M_k_tmp, type = "response") > 0.5)  != trainy) / length(trainy) # calculate misclassification rate, 0.5 cutoff
+
+    }
+    
+    best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum training loss
+    
+    predictors_k <- unlist(results_k.df$predictors[best.model_k]) # get predictors from model M_k, preferably vector of indeces
+    
+    M_k_list$predictors[k] <- list(predictors_k) # save which predictors give min misclass rate for k predictors
+    M_k_list$misclass_rate[k] <- results_k.df$misclass_rate[best.model_k]
+  }
+  
+  # select best model from each of the p models from AIC
+  return(M_k_list)
+} 
+
+best_subset <- backwards.gbm(trainx, trainy, 1000, 2, 0.1)
 
 ```
 
