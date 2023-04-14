@@ -172,9 +172,8 @@ backwards.gbm <- function(trainx, trainy, B, d, shrinkage) {
                      shrinkage = shrinkage) # fit model with current selection of predictors
       
       # save training loss and corresponding predictors in a list or something
-      results_k.df$predictors[j] <- list(current_predictors)
-      results_k.df$misclass_rate[j] <- sum(as.numeric(predict(M_k_tmp, type = "response") > 0.5)  != trainy) / length(trainy) # calculate misclassification rate, 0.5 cutoff
-
+      results_k.df$predictors[j] <- list(current_predictors) # save corresponding predictors
+      results_k.df$misclass_rate[j] <- min(M_k_tmp$train.error) # save training error from gbm object
     }
     
     best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum training loss
@@ -185,11 +184,18 @@ backwards.gbm <- function(trainx, trainy, B, d, shrinkage) {
     M_k_list$misclass_rate[k] <- results_k.df$misclass_rate[best.model_k]
   }
   
-  # select best model from each of the p models from AIC
+  # select best model from each of the p models from AIC, but we can't use AIC since tree-based models are non-parametric -> we use cross validation to find the best one
+  # for (k in ncol(trainx):2) {
+  #   LL <- sum(log(Predicted probabilities for values entered as 1)) + sum(log(1 - Predicted probabilities for values entered as 0))
+  #   AIC <- - 2*LL 
+  # }
+  # LL <- sum(log(Predicted probabilities for values entered as 1)) + sum(log(1 - Predicted probabilities for values entered as 0))
+  
   return(M_k_list)
 } 
 
-best_subset <- backwards.gbm(trainx, trainy, 1000, 2, 0.1)
+best_subset1 <- backwards.gbm(trainx, trainy, 1000, 2, 0.1)
+best_subset2 <- backwards.gbm(trainx, trainy, 5000, 1, 0.1)
 
 ```
 
