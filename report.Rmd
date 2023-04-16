@@ -159,9 +159,17 @@ table(pred = yhat.logistic, truth = longitudinal.test$Demented) # 0.8648649
 
 ```{r}
 # SVM
-install.packages("e1071")
-library("e1071")
+# Topics to investigate: 
+# - subset selection?
+# - parameter tuning: C, gamma and kernel
+# - data with and without deltas
 
+install.packages("e1071")
+install.packages("caret")
+library("e1071")
+library("caret")
+
+set.seed(58008)
 # Linear kernel
 lin.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=10)
 lin.svm.predict <- predict(lin.svm,newdata=longitudinal.test,type="class")
@@ -182,34 +190,84 @@ sig.svm <-svm(Demented~.,data=longitudinal.train,kernel="sigmoid",cost=10)
 sig.svm.predict <- predict(sig.svm,newdata=longitudinal.test,type="class")
 table(sig.svm.predict,longitudinal.test$Demented)
 
-# Testing for different costs "C"
-
+# Testing for different costs "C" (longitudinal data)
+set.seed(58008)
+# Range of costs from 0-10
 C = c(1:20)
+best_cost = c()
+# We'll do multiple passes with k-fold CV using the training data. 
+# Then choose the average C
+for (j in 1:10) {
+  accuracy = c()
+  for (i in 1:length(C)) {
+    long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=C[i],cross=5)
+    accuracy <- c(accuracy,long.svm[29])
+  }
+  index <- which.max(accuracy)
+  best_cost <- c(best_cost,C[index])
+}
+print(best_cost)
+# Result seems arbitrary
+# choose the average C of the 'best ones'
+avg_C = mean(best_cost)
+long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=avg_C)
+long.predict.svm <- predict(long.svm, newdata=longitudinal.test,type="class")
+confusionMatrix(long.predict.svm,longitudinal.test$Demented)
+
+# Testing with different "gammas"
+set.seed(58008)
+G = c(1:20)/20
 accuracy = c()
-for (i in 1:length(C)) {
-  long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=C[i],cross=10)
+for (i in 1:length(G)) {
+  long.svm <- svm(Demented~.,data=longitudinal.train,kernel="polynomial",gamma=G[i],cross=10)
   accuracy <- c(accuracy,long.svm[29])
 }
-plot(C,accuracy)
-long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=14)
+plot(G,accuracy)
+index <- which.max(accuracy)
+Gamma <- G[index]
+print(Gamma)
+long.svm <- svm(Demented~.,data=longitudinal.train,kernel="polynomial",gamma=Gamma)
 long.predict.svm <- predict(long.svm, newdata=longitudinal.test,type="class")
-table(long.predict.svm,longitudinal.test$Demented)
+confusionMatrix(long.predict.svm,longitudinal.test$Demented)
+
+set.seed(58008)
+# Dataframes with only deltas (longitudinal data)
+deltas.long <- baseline_with_deltas %>% na.omit() %>% select(c(dAge,dASF,deTIV,dMMSE,dnWBV,Demented)) 
+deltas.index <- sample(1:nrow(deltas.long), floor(.75 * nrow(deltas.long)))
+deltas.train <- deltas.long[deltas.index,]
+deltas.test <- deltas.long[-deltas.index,]
+
+deltas.svm <- svm(Demented~., data=deltas.train,kernel="linear",cost=10)
+deltas.predict <- predict(deltas.svm, newdata=deltas.test,type="class")
+table(deltas.predict, deltas.test$Demented)
+# Result is horrible, no matter the kernel
+
+set.seed(58008)
+# Dataframes without deltas (longitudinal data)
+nodelt.long <- baseline_with_deltas %>% select(c(Age,ASF,eTIV,MMSE,nWBV,Demented)) %>% na.omit()
+nodelt.index <- sample(1:nrow(nodelt.long), floor(.75 * nrow(nodelt.long)))
+nodelt.train <- nodelt.long[nodelt.index,]
+nodelt.test <- nodelt.long[-nodelt.index,]
+
+nodelt.svm <- svm(Demented~., data=nodelt.train,kernel="linear",cost=10)
+nodelt.predict <- predict(nodelt.svm, newdata=nodelt.test,type="class")
+table(nodelt.predict, nodelt.test$Demented)
+# Result is still worse without deltas
+
+confusionMatrix(nodelt.predict, nodelt.test$Demented)
 
 
-C = c(1:30)
-accuracy = c()
-for (i in 1:length(C)) {
-  cross.svm <- svm(Demented~.,data=cs.train,kernel="linear",cost=C[i],cross=10)
-  accuracy <- c(accuracy,cross.svm[29])
+svm.subset <- function(train,Gamma,C,ker="linear") {
+  # Best subset selection. Stepwise, forward
+  N = ncol(train) # no. of coloumns
+  for (i in 1:N) {
+
+  }
+  SVM <- svm(Demented~., data=train,kernel=ker,gamma=Gamma,cost=C,cross=10)
+  accuracy <- SVM[29]
 }
-plot(C,accuracy)
-Cost <- which.max(accuracy)
-print(Cost)
-cross.svm <- svm(Demented~.,data=cs.train,kernel="linear",cost=Cost)
-cross.svm.predict <- predict(cross.svm,newdata=cs.test,type="class")
-table(cross.svm.predict,cs.test$Demented)
-
-summary(longitudinal.train)
+SVM <- svm(Demented~Age, data=longitudinal.train,kernel="linear",gamma=1,cost=1,cross=10)
+summary(SVM)
 ```
 
 
@@ -242,9 +300,7 @@ table(pred = yhat.qda, truth = longitudinal.test$Demented) # 0.8648649
 
 ## Descriptive data analysis/statistics
 ```{r}
-summary(baseline_with_deltas)
 
-hist(baseline_with_deltas$Demented~baseline_with_deltas$dAge)
 ```
 
 ## Methods
