@@ -256,18 +256,10 @@ table(nodelt.predict, nodelt.test$Demented)
 
 confusionMatrix(nodelt.predict, nodelt.test$Demented)
 
+set.seed(58008)
+SVM <- svm(Demented~.,data=longitudinal.train,kernel="linear",cross=10)
+print(SVM[29])
 
-svm.subset <- function(train,Gamma,C,ker="linear") {
-  # Best subset selection. Stepwise, forward
-  N = ncol(train) # no. of coloumns
-  for (i in 1:N) {
-
-  }
-  SVM <- svm(Demented~., data=train,kernel=ker,gamma=Gamma,cost=C,cross=10)
-  accuracy <- SVM[29]
-}
-SVM <- svm(Demented~Age, data=longitudinal.train,kernel="linear",gamma=1,cost=1,cross=10)
-summary(SVM)
 ```
 
 
