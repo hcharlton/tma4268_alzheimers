@@ -161,6 +161,7 @@ table(pred = yhat.logistic, truth = longitudinal.test$Demented) # 0.8648649
 Attempt at data prediction using a SVM model. The "e1071" package has a built-in
 svm function. It can also perform k-fold CV on the data (returns accuracy metric - perecentage of predictions it got right).
 First step is to standardize data, usually yields better performance when fitting models.
+(might be that the svm function does this internally)
 ```{r}
 # Necessary packages
 install.packages("e1071")
@@ -170,12 +171,12 @@ library("caret")
 
 summary(longitudinal.train)
 st.long.train <- longitudinal.train
-# Standardize all the numeric features
+# Standardize/normalize all the numeric features
 st.long.train[,2:12] <- scale(st.long.train[,2:12]) 
 summary(st.long.train)
 ```
 Second step is to make a choice of kernel. Usually, as the feature space increases
-data can tend to become more linearly seperable. So a linear kernel is a natural choice.
+data can tend to become more linearly seperable. So a linear kernel is a natural choice to test.
 Polynomial kernels increase rapidly in complexity as dimensions increase. Also, adding
 larger degree polynomial hyperplanes quickly result in overfitting of data. 
 Possibly radial kernel as the second choice of kernel.
@@ -201,56 +202,57 @@ set.seed(58008)
 # Range of costs, by orders of magnitude
 
 # Linear kernel
-C = c(1e-4,1e-3,1e-2,1e-1,1e-0,1e+1,1e+2,1e+3,1e+4)
+C = 10^(-4:3)
 best_cost_lin = c()
 for (j in 1:10) {
   accuracy = c()
   for (i in 1:length(C)) {
-    long.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=C[i],cross=10)
-    accuracy <- c(accuracy,long.svm[29])
+    lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=C[i],cross=10,scale=FALSE)
+    accuracy <- c(accuracy,lin.svm[29])
   }
   index <- which.max(accuracy)
   best_cost_lin <- c(best_cost_lin,C[index])
 }
 print("Linear C:")
 print(best_cost_lin)
-
-# Radial kernel
-C = c(1e-4,1e-3,1e-2,1e-1,1e-0,1e+1,1e+2,1e+3,1e+4)
-best_cost_rad = c()
-for (j in 1:10) {
-  accuracy = c()
-  for (i in 1:length(C)) {
-    long.svm <- svm(Demented~.,data=st.long.train,kernel="radial",cost=C[i],cross=10)
-    accuracy <- c(accuracy,long.svm[29])
-  }
-  index <- which.max(accuracy)
-  best_cost_rad <- c(best_cost_rad,C[index])
-}
-print("Radial C:")
-print(best_cost_rad)
-```
-Runtime is horrible for the linear kernel. Both models prefer costs >= 1.
-A cost of 1 seems to be most prevalent in both models. 
-
-A SVM with radial kernel also has a tuning parameter gamma
+``` 
+Either a cost of 1 or 10 seems to be producing the best results. Let's test the accuracy of both
 ```{r}
-# Testing with different "gammas"
 set.seed(58008)
-G = c(1:20)/20
-accuracy = c()
-for (i in 1:length(G)) {
-  long.svm <- svm(Demented~.,data=longitudinal.train,kernel="polynomial",gamma=G[i],cross=10)
-  accuracy <- c(accuracy,long.svm[29])
-}
-plot(G,accuracy)
-index <- which.max(accuracy)
-Gamma <- G[index]
-print(Gamma)
-long.svm <- svm(Demented~.,data=longitudinal.train,kernel="polynomial",gamma=Gamma)
-long.predict.svm <- predict(long.svm, newdata=longitudinal.test,type="class")
-confusionMatrix(long.predict.svm,longitudinal.test$Demented)
+# Cost = 1
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=1,cross=10)
+accuracy_1 <- lin.svm[29]
+print(accuracy_1)
 
+# Cost = 10
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=10,cross=10)
+accuracy_10 <- lin.svm[29]
+print(accuracy_10)
+```
+
+A SVM with radial kernel also has a tuning parameter gamma. Need to test with both 
+parameters simultaneously. e1071 library has a built-in tune function. 
+Let's see how it performs.
+```{r}
+set.seed(58008)
+for (i in 1:10) {
+  obj <- tune(svm, Demented~., data = st.long.train,ranges = list(gamma = 10^(-4:3), cost = 10^(-4:3)),tunecontrol = tune.control(cross=10))
+  GC <- summary(obj)[1]
+  best_cost <- GC[[1]]$cost
+  best_gamma <- GC[[1]]$gamma
+  k <- c(best_gamma,best_cost)
+  print(k)
+}
+```
+Most dynamic duo: gamma = 1e-02, cost = 1e+02. Let's test it's accuracy
+```{r}
+set.seed(58008)
+radial.svm <- svm(Demented~.,data=st.long.train,kernel="radial",gamma=1e-02,cost=1e+02,cross=10)
+accuracy <- radial.svm[29]
+print(accuracy)
+```
+Accuracy yield is higher than before, result seems promising. 
+```{r}
 set.seed(58008)
 # Dataframes with only deltas (longitudinal data)
 deltas.long <- baseline_with_deltas %>% na.omit() %>% select(c(dAge,dASF,deTIV,dMMSE,dnWBV,Demented)) 
