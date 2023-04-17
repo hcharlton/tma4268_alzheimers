@@ -157,63 +157,84 @@ table(pred = yhat.logistic, truth = longitudinal.test$Demented) # 0.8648649
 ```
 
 
-```{r}
 # SVM
-# Topics to investigate: 
-# - subset selection?
-# - parameter tuning: C, gamma and kernel
-# - data with and without deltas
-
+Attempt at data prediction using a SVM model. The "e1071" package has a built-in
+svm function. It can also perform k-fold CV on the data (returns accuracy metric - perecentage of predictions it got right).
+First step is to standardize data, usually yields better performance when fitting models.
+```{r}
+# Necessary packages
 install.packages("e1071")
 install.packages("caret")
 library("e1071")
 library("caret")
 
+summary(longitudinal.train)
+st.long.train <- longitudinal.train
+# Standardize all the numeric features
+st.long.train[,2:12] <- scale(st.long.train[,2:12]) 
+summary(st.long.train)
+```
+Second step is to make a choice of kernel. Usually, as the feature space increases
+data can tend to become more linearly seperable. So a linear kernel is a natural choice.
+Polynomial kernels increase rapidly in complexity as dimensions increase. Also, adding
+larger degree polynomial hyperplanes quickly result in overfitting of data. 
+Possibly radial kernel as the second choice of kernel.
+```{r}
 set.seed(58008)
 # Linear kernel
-lin.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=10)
-lin.svm.predict <- predict(lin.svm,newdata=longitudinal.test,type="class")
-table(lin.svm.predict,longitudinal.test$Demented)
-
-# Polynomial kernel
-pol.svm <-svm(Demented~.,data=longitudinal.train,kernel="polynomial",cost=10)
-pol.svm.predict <- predict(pol.svm,newdata=longitudinal.test,type="class")
-table(pol.svm.predict,longitudinal.test$Demented)
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cross=10)
+summary(lin.svm)
 
 # Radial kernel
-rad.svm <-svm(Demented~.,data=longitudinal.train,kernel="radial",cost=10)
-rad.svm.predict <- predict(rad.svm,newdata=longitudinal.test,type="class")
-table(rad.svm.predict,longitudinal.test$Demented)
-
-# Sigmoid kernel
-sig.svm <-svm(Demented~.,data=longitudinal.train,kernel="sigmoid",cost=10)
-sig.svm.predict <- predict(sig.svm,newdata=longitudinal.test,type="class")
-table(sig.svm.predict,longitudinal.test$Demented)
-
-# Testing for different costs "C" (longitudinal data)
+rad.svm <-svm(Demented~.,data=st.long.train,kernel="radial",cross=10)
+summary(rad.svm)
+```
+Both kernels perform decent, with accuracy > 75%. Linear kernel performs slightly better
+under deafult choice of parameters. Now onto investigating tuning parameters.
+Begin with tuning cost-parameter C. C "acts" as a weight of how hard we penalize
+data that lies in the margin of the boundary in the model.  
+```{r}
 set.seed(58008)
-# Range of costs from 0-10
-C = c(1:20)
-best_cost = c()
+# Testing for different costs "C" 
 # We'll do multiple passes with k-fold CV using the training data. 
 # Then choose the average C
+# Range of costs, by orders of magnitude
+
+# Linear kernel
+C = c(1e-4,1e-3,1e-2,1e-1,1e-0,1e+1,1e+2,1e+3,1e+4)
+best_cost_lin = c()
 for (j in 1:10) {
   accuracy = c()
   for (i in 1:length(C)) {
-    long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=C[i],cross=5)
+    long.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=C[i],cross=10)
     accuracy <- c(accuracy,long.svm[29])
   }
   index <- which.max(accuracy)
-  best_cost <- c(best_cost,C[index])
+  best_cost_lin <- c(best_cost_lin,C[index])
 }
-print(best_cost)
-# Result seems arbitrary
-# choose the average C of the 'best ones'
-avg_C = mean(best_cost)
-long.svm <- svm(Demented~.,data=longitudinal.train,kernel="linear",cost=avg_C)
-long.predict.svm <- predict(long.svm, newdata=longitudinal.test,type="class")
-confusionMatrix(long.predict.svm,longitudinal.test$Demented)
+print("Linear C:")
+print(best_cost_lin)
 
+# Radial kernel
+C = c(1e-4,1e-3,1e-2,1e-1,1e-0,1e+1,1e+2,1e+3,1e+4)
+best_cost_rad = c()
+for (j in 1:10) {
+  accuracy = c()
+  for (i in 1:length(C)) {
+    long.svm <- svm(Demented~.,data=st.long.train,kernel="radial",cost=C[i],cross=10)
+    accuracy <- c(accuracy,long.svm[29])
+  }
+  index <- which.max(accuracy)
+  best_cost_rad <- c(best_cost_rad,C[index])
+}
+print("Radial C:")
+print(best_cost_rad)
+```
+Runtime is horrible for the linear kernel. Both models prefer costs >= 1.
+A cost of 1 seems to be most prevalent in both models. 
+
+A SVM with radial kernel also has a tuning parameter gamma
+```{r}
 # Testing with different "gammas"
 set.seed(58008)
 G = c(1:20)/20
@@ -260,6 +281,9 @@ set.seed(58008)
 SVM <- svm(Demented~.,data=longitudinal.train,kernel="linear",cross=10)
 print(SVM[29])
 
+c = "Age"
+formula <- paste("Demented~", paste(c, collapse=" + "))
+svm(formula,data=longitudinal.train)
 ```
 
 
