@@ -179,7 +179,12 @@ Second step is to make a choice of kernel. Usually, as the feature space increas
 data can tend to become more linearly seperable. So a linear kernel is a natural choice to test.
 Polynomial kernels increase rapidly in complexity as dimensions increase. Also, adding
 larger degree polynomial hyperplanes quickly result in overfitting of data. 
-Possibly radial kernel as the second choice of kernel.
+RBF-kernel, or a radial basis function kernel is most widely used in practice 
+when using SVM's, so it would be interesting to compare with this one. 
+Simgoid kernel is usually good for binary classification problems, but is avoided
+in this investigation. In pre-testing, results did not seem promising for this kernel,
+so it will be avoided here. Altough, it would be interesting to investigate it further
+in a more detailed SVM analysis.
 ```{r}
 set.seed(58008)
 # Linear kernel
@@ -193,18 +198,19 @@ summary(rad.svm)
 Both kernels perform decent, with accuracy > 75%. Linear kernel performs slightly better
 under deafult choice of parameters. Now onto investigating tuning parameters.
 Begin with tuning cost-parameter C. C "acts" as a weight of how hard we penalize
-data that lies in the margin of the boundary in the model.  
+data that lies in the margin of the boundary in the model. 
+
+C is the only tuning parameter for a linear kernel, so we start there.
 ```{r}
 set.seed(58008)
-# Testing for different costs "C" 
+# Testing accuracy for different costs "C" 
 # We'll do multiple passes with k-fold CV using the training data. 
-# Then choose the average C
-# Range of costs, by orders of magnitude
+# Range of costs, by orders of magnitude (C=10^4 results in max iteration problems)
 
 # Linear kernel
 C = 10^(-4:3)
 best_cost_lin = c()
-for (j in 1:10) {
+for (j in 1:15) {
   accuracy = c()
   for (i in 1:length(C)) {
     lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=C[i],cross=10,scale=FALSE)
@@ -213,45 +219,54 @@ for (j in 1:10) {
   index <- which.max(accuracy)
   best_cost_lin <- c(best_cost_lin,C[index])
 }
-print("Linear C:")
-print(best_cost_lin)
+
+tab <- table(best_cost_lin)
+y <- names(tab)
+x <- as.numeric(tab)
+barplot(x,names.arg = y,ylab="Frequenzy",xlab="Cost")
 ``` 
-Either a cost of 1 or 10 seems to be producing the best results. Let's test the accuracy of both
-```{r}
-set.seed(58008)
-# Cost = 1
-lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=1,cross=10)
-accuracy_1 <- lin.svm[29]
-print(accuracy_1)
+Cost of 1 seems to be most prevalent after 15 runs.
 
-# Cost = 10
-lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=10,cross=10)
-accuracy_10 <- lin.svm[29]
-print(accuracy_10)
-```
-
-A SVM with radial kernel also has a tuning parameter gamma. Need to test with both 
-parameters simultaneously. e1071 library has a built-in tune function. 
+A SVM with radial kernel also has a tuning parameter gamma. Gamma is closely
+related to the curvature of the seperating boundary, or the "stiffness" of it.
+Need to test with both parameters simultaneously.
+e1071 library has a built-in tune function to handle this.
 Let's see how it performs.
 ```{r}
 set.seed(58008)
+# 10 runs with 10-fold CV. Selecting the best combination of gamma and C
+# in each iteration. How to represent this data well?
 for (i in 1:10) {
   obj <- tune(svm, Demented~., data = st.long.train,ranges = list(gamma = 10^(-4:3), cost = 10^(-4:3)),tunecontrol = tune.control(cross=10))
   GC <- summary(obj)[1]
+  acc <- summary(obj)[2]
+  acc <- (1-acc[[1]])*100
   best_cost <- GC[[1]]$cost
   best_gamma <- GC[[1]]$gamma
-  k <- c(best_gamma,best_cost)
+  k <- c(best_gamma,best_cost,acc)
   print(k)
 }
 ```
-Most dynamic duo: gamma = 1e-02, cost = 1e+02. Let's test it's accuracy
+It appears that a gamma of 0.01 and a cost of 100 produces the best results on average.
+Now we have obtained a tuning of hyperparamters for both kernels.
+Let's test the accuracy of both kernels with tuned hyperparameters.
 ```{r}
 set.seed(58008)
+# Linear kernel, cost = 1
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=1,cross=10)
+lin_accuracy <- lin.svm[29]
+print(lin_accuracy)
+# Radial kernel, gamma = 0.01, cost = 100
 radial.svm <- svm(Demented~.,data=st.long.train,kernel="radial",gamma=1e-02,cost=1e+02,cross=10)
-accuracy <- radial.svm[29]
-print(accuracy)
+rad_accuracy <- radial.svm[29]
+print(rad_accuracy)
 ```
-Accuracy yield is higher than before, result seems promising. 
+Both models have an accuracy of approx. 80%. Radial kernel under the given
+parameters performs slightly better than linear. I wouldn't say the results are 
+conclusive in determining which model is best.
+
+This section is about how the SVM performs when only considering deltas/removing deltas.
+It is outdated and may be omitted if it's unnecessary.
 ```{r}
 set.seed(58008)
 # Dataframes with only deltas (longitudinal data)
@@ -279,13 +294,6 @@ table(nodelt.predict, nodelt.test$Demented)
 
 confusionMatrix(nodelt.predict, nodelt.test$Demented)
 
-set.seed(58008)
-SVM <- svm(Demented~.,data=longitudinal.train,kernel="linear",cross=10)
-print(SVM[29])
-
-c = "Age"
-formula <- paste("Demented~", paste(c, collapse=" + "))
-svm(formula,data=longitudinal.train)
 ```
 
 
