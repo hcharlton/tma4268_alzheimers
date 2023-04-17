@@ -135,15 +135,9 @@ longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost,
                           distribution = "bernoulli", n.trees = 5000, interaction.depth = 2)
 summary(longitudinal.boost)
 longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented == "FALSE", 0,1))
-<<<<<<< Updated upstream
 yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 5000, type = "response")
 yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
 table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
-=======
-yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, n.trees = 1000, type = "response")
-yhat.boost <- ifelse(yhat.boost > 0.5, 1,0) # nolint
-table(yhat.boost, longitudinal.test.boost$Demented)
->>>>>>> Stashed changes
 ```
 
 
@@ -223,7 +217,7 @@ for (j in 1:15) {
 tab <- table(best_cost_lin)
 y <- names(tab)
 x <- as.numeric(tab)
-barplot(x,names.arg = y,ylab="Frequenzy",xlab="Cost")
+barplot(x, names.arg = y, ylab = "Frequency", xlab = "Cost")
 ``` 
 Cost of 1 seems to be most prevalent after 15 runs.
 
