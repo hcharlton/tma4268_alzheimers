@@ -100,6 +100,38 @@ set.seed(1337)
 longitudinal.train.boost <- mutate(longitudinal.train, Demented = ifelse(Demented == "FALSE", 0,1))
 ```
 
+### Boosted classification tree
+
+Here we a classification tree by boosting. This is done using the ´gbm´ package. To choose the number of trees to use we employ 10-fold cross-validation though the function itself. To choose the interaction depth we examine four different models and choose the model with lowest overall cross-validation error. We use a shrinkage of 0.1 for all models. 
+
+```{r}
+gbm1 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 1, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
+gbm2 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 2, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
+gbm3 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 3, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
+gbm4 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 4, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
+
+iters = 1:100
+
+cv.df <- data.frame(iteration = iters, 
+                    cv1 = gbm1$cv.error[iters], cv2 = gbm2$cv.error[iters], 
+                    cv3 = gbm3$cv.error[iters], cv4 = gbm4$cv.error[iters])
+
+ggplot(cv.df, aes(x=iteration)) + 
+  geom_line(aes(y = cv1, color = "d=1")) + 
+  geom_line(aes(y = cv2, color = "d=2")) +
+  geom_line(aes(y = cv3, color = "d=3")) +
+  geom_line(aes(y = cv4, color = "d=4")) +
+  geom_point(aes(x = which.min(cv1), y = min(cv1))) +
+  geom_point(aes(x = which.min(cv2), y = min(cv2))) +
+  geom_point(aes(x = which.min(cv3), y = min(cv3))) +
+  geom_point(aes(x = which.min(cv4), y = min(cv4))) +
+  labs(x = "Iteration", y = "Cross-validation error") + 
+  theme_minimal()
+```
+
+From the above plot we see that an interaction depth of 2 gives the minimum CV-error with `{r} which.min(cv.df$cv2)` iterations. Thus we use an interaction depth of 2 with 22 trees and a shrinkage of 0.1 for the boosted classification tree. 
+
+
 
 
 ### Feature selection sensitivity test
@@ -111,93 +143,62 @@ library("stepgbm")
 trainx <- select(longitudinal.train.boost, -Demented)
 trainy <- longitudinal.train.boost$Demented
 
-# n.trees = 1000, 5000
-# interaction.depth = 1, 2
-
-feature.selection.boost <- stepgbm(trainx, trainy, 
-                                   family = "bernoulli",
-                                   n.trees = 3000, 
-                                   learning.rate = 0.1,
-                                   interaction.depth = 2, 
-                                   cv.fold = 10,
-                                   rseed = 1337, 
-                                   keep.data = TRUE)
-
-feature.selection.boost <- stepgbm(trainx, trainy, 
-                                   method = "KIRVI", 
-                                   family = "bernoulli", 
-                                   rpt = 2,
-                                   predacc = "VEcv",
-                                   cv.fold = 5,
-                                   min.n.var = 2,
-                                   n.cores = 2,
-                                   delta.predacc = 0.01,
-                                   rseed = 1337)
-
-feature.selection.boost <- stepgbmRVI(trainx, trainy, 
-                                      family = "bernoulli", 
-                                      n.trees = 100, 
-                                      interaction.depth = 2, 
-                                      learning.rate = 0.01, 
-                                      cv.fold = 5, 
-                                      n.cores = 2, 
-                                      min.n.var = 1, 
-                                      rseed = 1234)
-
-longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost, 
-                          distribution = "bernoulli", n.trees = 2000, 
-                          interaction.depth = 2)
-
 # backwards feature selection
-
-backwards.gbm <- function(trainx, trainy, B, d, shrinkage) {
+backwards.gbm <- function(trainx, trainy, B, d, shrinkage, folds) {
+  
   # Step 1
-  M_p <- gbm(trainy ~ ., data = trainx, distribution = "bernoulli", n.trees = B, interaction.depth = d, shrinkage = shrinkage) # full model
+  M_k_list <- data.frame(predictors = rep(0, ncol(trainx)), misclass_rate = rep(0, ncol(trainx)), cv_err = rep(0,ncol(trainx)), iterations = rep(0,ncol(trainx)))
+  M_k_list$predictors[ncol(trainx)] <- list(1:ncol(trainx))
+  predictors_k <- c(1:ncol(trainx)) # start with all predictors
   
   # Step 2
-  M_k_list <- data.frame(predictors = rep(0, ncol(trainx)), misclass_rate = rep(0, ncol(trainx)))
-  
-  predictors_k <- c(1:ncol(trainx)) # start with all predictors
-  for (k in ncol(trainx):2) { # iterate backwards
-    # Consider all k models that contain all but one of the predictors in M_k for a total of k-1 predictors
+  # Consider all k models that contain all but one of the predictors in M_k for a total of k-1 predictors
 
+  for (k in ncol(trainx):d) { # iterate backwards, minimum d predictors
+  
     results_k.df <- data.frame(predictors = I(rep(list(rep(0,k-1)), k)), 
-                               misclass_rate = rep(0, k)) # k rows, 2 columns, first column is which predictors
+                               misclass_rate = rep(0, k), iterations = rep(0, k)) # k rows, 3 columns, first column is which predictors
     
     for (j in 1:k) { # iterate through predictors_k
       current_predictors <- predictors_k[-j]  # exclude jth predictor
       
       M_k_tmp <- gbm(trainy ~ ., data = select(trainx, current_predictors),
                      distribution = "bernoulli", n.trees = B, interaction.depth = d, 
-                     shrinkage = shrinkage) # fit model with current selection of predictors
+                     shrinkage = shrinkage, cv.folds = 5) # fit model with current selection of predictors
       
-      # save training loss and corresponding predictors in a list or something
-      results_k.df$predictors[j] <- list(current_predictors) # save corresponding predictors
       results_k.df$misclass_rate[j] <- min(M_k_tmp$train.error) # save training error from gbm object
-    }
+      results_k.df$predictors[j] <- list(current_predictors) # save corresponding predictors
+      results_k.df$iterations[j] <- gbm.perf(M_k_tmp, plot.it = FALSE, method = "cv") # save number of trees
+      
+      }
     
-    best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum training loss
+    best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum training loss - should we use a different measure?
     
     predictors_k <- unlist(results_k.df$predictors[best.model_k]) # get predictors from model M_k, preferably vector of indeces
     
-    M_k_list$predictors[k] <- list(predictors_k) # save which predictors give min misclass rate for k predictors
-    M_k_list$misclass_rate[k] <- results_k.df$misclass_rate[best.model_k]
+    M_k_list$predictors[k-1] <- list(predictors_k) # save which predictors give min misclass rate for k predictors
+    M_k_list$misclass_rate[k-1] <- results_k.df$misclass_rate[best.model_k]
+    M_k_list$iterations <- results_k.df$iterations[best.model_k]
   }
   
-  # select best model from each of the p models from AIC, but we can't use AIC since tree-based models are non-parametric -> we use cross validation to find the best one
-  # for (k in ncol(trainx):2) {
-  #   LL <- sum(log(Predicted probabilities for values entered as 1)) + sum(log(1 - Predicted probabilities for values entered as 0))
-  #   AIC <- - 2*LL 
-  # }
-  # LL <- sum(log(Predicted probabilities for values entered as 1)) + sum(log(1 - Predicted probabilities for values entered as 0))
-  
+  # Takes a lot of compute to run CV on all models when we're only intereseted in the ones we select for each k
+  # for (k in 2:ncol(trainx)){ 
+  #   predictors <- unlist(M_k_list$predictors[k])
+  #   model <- gbm(trainy ~ ., data = select(trainx, all_of(predictors)),
+  #                   distribution = "bernoulli", n.trees = M_k_list$iterations[k], interaction.depth = d, shrinkage = shrinkage, cv.folds = folds, n.cores = 2) # refit models
+  #   M_k_list$cv_err[k] <- model$cv.error # save cv error
+  #  }
+  #return(M_k_list$predictors[which.min(M_k_list$cv_err)]) # return predictors of model with lowest cv error
   return(M_k_list)
-} 
 
-best_subset1 <- backwards.gbm(trainx, trainy, 1000, 2, 0.1)
-best_subset2 <- backwards.gbm(trainx, trainy, 5000, 1, 0.1)
+  } 
+
+set.seed(1337)
+best_subset1 <- backwards.gbm(trainx, trainy, 200, 2, 0.1, 5)
 
 ```
+
+
 
 
 ### Feature selection
