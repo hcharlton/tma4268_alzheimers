@@ -192,7 +192,7 @@ summary(rad.svm)
 Both kernels perform decent, with accuracy > 75%. Linear kernel performs slightly better
 under deafult choice of parameters. Now onto investigating tuning parameters.
 Begin with tuning cost-parameter C. C "acts" as a weight of how hard we penalize
-data that lies in the margin of the boundary in the model. 
+data that lies in the margin of the boundary seperating the prediction space in the model. 
 
 C is the only tuning parameter for a linear kernel, so we start there.
 ```{r}
@@ -223,23 +223,25 @@ Cost of 1 seems to be most prevalent after 15 runs.
 
 A SVM with radial kernel also has a tuning parameter gamma. Gamma is closely
 related to the curvature of the seperating boundary, or the "stiffness" of it.
-Need to test with both parameters simultaneously.
+Need to test with both gamma and cost simultaneously as these parameters are correlated.
 e1071 library has a built-in tune function to handle this.
 Let's see how it performs.
 ```{r}
 set.seed(58008)
 # 10 runs with 10-fold CV. Selecting the best combination of gamma and C
 # in each iteration. How to represent this data well?
+gammas <- c()
+costs <- c()
 for (i in 1:10) {
   obj <- tune(svm, Demented~., data = st.long.train,ranges = list(gamma = 10^(-4:3), cost = 10^(-4:3)),tunecontrol = tune.control(cross=10))
   GC <- summary(obj)[1]
-  acc <- summary(obj)[2]
-  acc <- (1-acc[[1]])*100
   best_cost <- GC[[1]]$cost
   best_gamma <- GC[[1]]$gamma
-  k <- c(best_gamma,best_cost,acc)
-  print(k)
+  gammas <- c(gammas,best_gamma)
+  costs <- c(costs,best_cost)
 }
+tab <- table(gammas,costs)
+print(tab)
 ```
 It appears that a gamma of 0.01 and a cost of 100 produces the best results on average.
 Now we have obtained a tuning of hyperparamters for both kernels.
@@ -260,36 +262,41 @@ parameters performs slightly better than linear. I wouldn't say the results are
 conclusive in determining which model is best.
 
 This section is about how the SVM performs when only considering deltas/removing deltas.
-It is outdated and may be omitted if it's unnecessary.
+First we need to create two new training sets from the data set. One using categorical variables and deltas, 
+and one using categorical variables without deltas.
 ```{r}
-set.seed(58008)
-# Dataframes with only deltas (longitudinal data)
-deltas.long <- baseline_with_deltas %>% na.omit() %>% select(c(dAge,dASF,deTIV,dMMSE,dnWBV,Demented)) 
+# Dataframes with only deltas
+deltas.long <- baseline_with_deltas %>% na.omit() %>% select(c(M.F,dAge,dASF,deTIV,dMMSE,dnWBV,Demented)) 
 deltas.index <- sample(1:nrow(deltas.long), floor(.75 * nrow(deltas.long)))
 deltas.train <- deltas.long[deltas.index,]
-deltas.test <- deltas.long[-deltas.index,]
 
-deltas.svm <- svm(Demented~., data=deltas.train,kernel="linear",cost=10)
-deltas.predict <- predict(deltas.svm, newdata=deltas.test,type="class")
-table(deltas.predict, deltas.test$Demented)
-# Result is horrible, no matter the kernel
-
-set.seed(58008)
-# Dataframes without deltas (longitudinal data)
-nodelt.long <- baseline_with_deltas %>% select(c(Age,ASF,eTIV,MMSE,nWBV,Demented)) %>% na.omit()
+# Dataframes without deltas
+nodelt.long <- baseline_with_deltas %>% select(c(M.F,Age,ASF,eTIV,MMSE,nWBV,Demented)) %>% na.omit()
 nodelt.index <- sample(1:nrow(nodelt.long), floor(.75 * nrow(nodelt.long)))
 nodelt.train <- nodelt.long[nodelt.index,]
-nodelt.test <- nodelt.long[-nodelt.index,]
 
-nodelt.svm <- svm(Demented~., data=nodelt.train,kernel="linear",cost=10)
-nodelt.predict <- predict(nodelt.svm, newdata=nodelt.test,type="class")
-table(nodelt.predict, nodelt.test$Demented)
-# Result is still worse without deltas
-
-confusionMatrix(nodelt.predict, nodelt.test$Demented)
-
+# Normalize new training sets
+deltas.train[,2:6] <- scale(deltas.train[,2:6]) 
+nodelt.train[,2:6] <- scale(nodelt.train[,2:6])
 ```
 
+We'll do one SVM call for each training set, using default parameters.
+```{r}
+set.seed(58008)
+
+# Default parameters: RBF-kernel, C = 1, gamma = 1/(no. of features), C-classification
+
+# Data with only categorical variables and deltas
+deltas.svm <- svm(Demented~., data=deltas.train,cross=10)
+print("Data with only deltas: ")
+print(deltas.svm[29])
+
+# Data with only categorical variables and without deltas
+nodelt.svm <- svm(Demented~., data=nodelt.train,cross=10)
+print("Data without deltas")
+print(nodelt.svm[29])
+```
+We get accuracies of approx. 71 and 75 for the data sets respectively. 
 
 ```{r}
 # LDA
