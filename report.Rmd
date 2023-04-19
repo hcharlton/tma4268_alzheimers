@@ -99,18 +99,29 @@ We consider three different classifiers, Logistic Regression, Random Forests and
 
 #### Random Forests
 
-Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) data, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes.
+We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
+
+This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
 
 
-For each tree we calculate the Out-Of-Bag (OOB) error estimate, the misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on. 
-
-Strengths/weaknessess: interpretability of classification trees versus predictive accuracy og random forests
 
 
 #### Support vector machines
 
+
 #### Model Selection
 
+To select a model we need to consider all possible models and make a decision based on some measure of goodness-of-fit. For this measure we use the misclassification rate to compute a cross-validated error estimate for one model of each classifier. To select one model for of each classifier for comparison, we use different methods for each classifier. A graphical representation of our model selection algorithm is shown below. We have chosen to initially only compare models of the same classifier as this seperates the search space and reduces the amount of computations considerably.
+
+*Insert graphic here*
+
+##### Logistic
+
+##### Random Forests
+
+For each tree we calculate the Out-Of-Bag (OOB) error estimate, the misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on. 
+
+##### SVM
 
 
 ### Results
