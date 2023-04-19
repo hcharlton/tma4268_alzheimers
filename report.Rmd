@@ -86,8 +86,6 @@ cs.test <- na.omit(cs.mutated[-cs.train.indeces,])
 ```
 
 ```{r}
-library("tree")
-library("gbm")
 library("randomForest")
 ```
 
@@ -103,7 +101,7 @@ We use Random Forests as a classifier as described in [ISLR2]. Random Forests is
 
 This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
 
-
+We implement Random Forests through the R package `randomForest`.
 
 
 #### Support vector machines
@@ -119,15 +117,15 @@ To select a model we need to consider all possible models and make a decision ba
 
 ##### Random Forests
 
-For each tree we calculate the Out-Of-Bag (OOB) error estimate, the misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on. 
+Random Forests can be tuned by two parameters, the number of trees $B$ and the amount of predictors to consider for each split $m$. The number of trees used to fit a random forest does not impact the bias-variance tradeoff as long as its high enough as high $B$ does not lead to overfitting [ISLR]. Thus we may plot the cumulative OOB error estimate for a fitted Random Forest and see where an increased number of trees give no error decrease. The OOB error estimate is the aggregated misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on.
+
+For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a numer of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
 
 ##### SVM
 
 
+
 ### Results
-
-
-At the cost of interpretability we use random forests for classification instead of regular classification trees. 
 
 ```{r}
 set.seed(1337)
@@ -135,184 +133,83 @@ set.seed(1337)
 p <- ncol(longitudinal.train) - 1 # number of predictors
 N <- nrow(longitudinal.train) # number of training observations
 
+
 trainx <- select(longitudinal.train, -Demented)
 trainy <- longitudinal.train$Demented
 
+
 rf <- randomForest(Demented ~., data = longitudinal.train, ntree = 5000, mtry = sqrt(p), importance = TRUE)
-rf
+err.df <- data.frame(x=1:5000, err = rf$err.rate[,1]) 
 
-rf.cv <- rfcv(trainx, trainy, cv.fold = 10)
-with(rf.cv, plot(n.var, error.cv, log="x", type="o", lwd=2))
-
-varImpPlot(rf)
-
-preds <- predict(rf)
-train.spec <- sum()
-
-```
-
-
-
-
-```{r}
-# Boosting, longitudinal
-set.seed(1337)
-
-# gbm wants response in {0,1}
-longitudinal.train.boost <- mutate(longitudinal.train, Demented = ifelse(Demented == "FALSE", 0,1))
-```
-
-### Boosted classification tree
-
-Here we a classification tree by boosting. This is done using the ´gbm´ package. To choose the number of trees to use we employ 10-fold cross-validation though the function itself. To choose the interaction depth we examine four different models and choose the model with lowest overall cross-validation error. We use a shrinkage of 0.1 for all models. 
-
-```{r}
-gbm1 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 1, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
-gbm2 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 2, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
-gbm3 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 3, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
-gbm4 <- gbm(Demented ~., data = longitudinal.train.boost, distribution = "bernoulli" ,n.trees = 5000, interaction.depth = 4, shrinkage = 0.1, cv.folds = 10, n.cores = 6)
-
-iters = 1:100
-
-cv.df <- data.frame(iteration = iters, 
-                    cv1 = gbm1$cv.error[iters], cv2 = gbm2$cv.error[iters], 
-                    cv3 = gbm3$cv.error[iters], cv4 = gbm4$cv.error[iters])
-
-ggplot(cv.df, aes(x=iteration)) + 
-  geom_line(aes(y = cv1, color = "d=1")) + 
-  geom_line(aes(y = cv2, color = "d=2")) +
-  geom_line(aes(y = cv3, color = "d=3")) +
-  geom_line(aes(y = cv4, color = "d=4")) +
-  geom_point(aes(x = which.min(cv1), y = min(cv1))) +
-  geom_point(aes(x = which.min(cv2), y = min(cv2))) +
-  geom_point(aes(x = which.min(cv3), y = min(cv3))) +
-  geom_point(aes(x = which.min(cv4), y = min(cv4))) +
-  labs(x = "Iteration", y = "Cross-validation error") + 
+ggplot(err.df, aes(x=x)) + 
+  geom_line(aes(y = err)) + 
+  labs(x = "Iteration", y = "Out-Of-Bag error estimate") + 
   theme_minimal()
 ```
 
-From the above plot we see that an interaction depth of 2 gives the minimum CV-error with `{r} which.min(cv.df$cv2)` iterations. Thus we use an interaction depth of 2 with 22 trees and a shrinkage of 0.1 for the boosted classification tree. 
-
-
-
-
-### Feature selection sensitivity test
-Quick test to see if the feature selection is sensitive to the choice of parameters.
-```{r}
-# Feature selection sensitivity test
-library("stepgbm")
-
-trainx <- select(longitudinal.train.boost, -Demented)
-trainy <- longitudinal.train.boost$Demented
-
-# backwards feature selection
-backwards.gbm <- function(trainx, trainy, B, d, shrinkage, folds) {
-  set.seed(1337)
-  p <- ncol(trainx)
-  # Step 1
-  M_k_list <- data.frame(predictors = rep(0, p), misclass_rate = rep(0, p), 
-                         cv_error = rep(0,p), iterations = rep(0,p), n.pred = c(1:p)) # only save down to d predictors?
-  
-  M_k_list$predictors[p] <- list(1:p) # save all predictors
-  
-  predictors_k <- c(1:p) # start with all predictors
-  
-  M_k_tmp <- gbm(trainy ~ ., data = select(trainx, predictors_k),
-                     distribution = "bernoulli", n.trees = B, interaction.depth = d, 
-                     shrinkage = shrinkage, cv.folds = folds) # fit full model with all predictors
-  
-  M_k_list$misclass_rate[p] <- mean(M_k_tmp$train.error) # save average training error from gbm object
-  M_k_list$predictors[p] <- list(predictors_k) # save corresponding predictors
-  M_k_list$iterations[p] <- gbm.perf(M_k_tmp, plot.it = FALSE, method = "cv") # save best number of trees
-  M_k_list$cv_error[p] <- min(M_k_tmp$cv.error) # save min cv-error from full model
-  
-  # Step 2
-  # Consider all k models that contain all but one of the predictors in M_k for a total of k-1 predictors
-
-  for (k in ncol(trainx):(d+1)) { # iterate backwards, minimum d predictors
-  
-    results_k.df <- data.frame(predictors = I(rep(list(rep(0,k-1)), k)), misclass_rate = rep(0,k),
-                               cv_error = rep(0, k), iterations = rep(0, k)) # k rows, 3 columns, first column is which predictors
-    
-    for (j in 1:k) { # iterate through predictors_k
-      current_predictors <- predictors_k[-j]  # exclude jth predictor
-      
-      M_k_tmp <- gbm(trainy ~ ., data = select(trainx, current_predictors),
-                     distribution = "bernoulli", n.trees = B, interaction.depth = d, 
-                     shrinkage = shrinkage) # fit model with current selection of predictors
-      
-      results_k.df$misclass_rate[j] <- mean(M_k_tmp$train.error) # save average training error from gbm object
-      results_k.df$predictors[j] <- list(current_predictors) # save corresponding predictors
-      }
-    # maybe use mean training loss?
-    best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum mean train loss - should we use a different measure?
-    
-    predictors_k <- unlist(results_k.df$predictors[best.model_k]) # get predictors from model M_k, vector of indeces
-    
-    M_k_list$misclass_rate[k-1] <- results_k.df$misclass_rate[best.model_k] # save the mean training loss
-    M_k_list$predictors[k-1] <- list(predictors_k) # save which predictors give min mean training loss for k predictors
-    }
-  
-  # refit selected models and do cv except last one, already done it 
-  for (k in d:(p-1)) { # only consider models with at least d predictors
-    print(k)
-    predictors <- unlist(M_k_list$predictors[k])
-    model <- gbm(trainy ~ ., data = select(trainx, predictors),
-                     distribution = "bernoulli", n.trees = B, interaction.depth = d, 
-                     shrinkage = shrinkage, cv.folds = folds) # fit model with best combination of k predictors
-    
-    M_k_list$iterations[k] <- gbm.perf(model, plot.it = FALSE, method = "cv") # save best number of trees
-    M_k_list$cv_error[k] <- model$cv.error[M_k_list$iterations[k]] # save cv-error from full model
-    
-  }
-  return(M_k_list)
-} 
-
-set.seed(1337)
-best_subset1 <- backwards.gbm(trainx, trainy, B = 1000, d = 2, shrinkage = 0.1, folds = 10)
-
-ggplot(best_subset1, aes(x=n.pred)) + 
-  geom_line(aes(y = cv_error, color = "d=2")) +
-  geom_point(aes(x = which.min(cv_error), y = min(cv_error))) +
-    labs(x = "Number of predictors", y = "Cross-validation error") + 
-  theme_minimal()
-```
-
-
-
-
-### Feature selection
-We fix a set of parameters and find the best subset of features given these parameter values, chosen with AIC.
+We see that 5000 trees is enough as the OOB error estimate stabilizes and it is not too slow to fit the model. Now we choose a value for $m$. We do this by computing the OOB error estimate for $m \in \{1,...,12\}$ as the amount of predictors is small enough so it is computationally feasible. 
 
 ```{r}
+B = 5000
+oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
 
+for (m in 1:p){
+  model <- randomForest(Demented ~., data = longitudinal.train,
+                        mtry = m, ntree = B)
+  oob.df$oob.err[m] <- model$err.rate[B,1] # save oob error
+}
+
+m <- oob.df$m[which.min(oob.df$oob.err)] # save best m value
+
+ggplot(data = oob.df, aes(x = m)) + 
+  geom_line(aes(y = oob.err)) + 
+  geom_point(aes(y = oob.err), shape = 21, colour = "black", fill = "white", size = 2.8 ) +
+  scale_x_continuous(breaks = seq(1,p,2)) +
+  labs(x = "m", y = "OOB error")
 ```
 
-
-### Paramter tuning
-Now we tune the parameters to the chosen subset of predictors with K-fold cross validation. 
-
-```{r}
-
-```
-
-This is all like a greedy algorithm for finding the best model out of all possible models by reducing the search space
+Here we see that the best value for $m$ is $m = $ `oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = 3$ randomly chosen predictors. 
 
 
 
-Now that we have the best boosted model out of all the 
 ### CV each method
 
-### Result
 ```{r}
-longitudinal.test.boost <- mutate(longitudinal.test, Demented = ifelse(Demented == "FALSE", 0,1))
+set.seed(1337)
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
 
-yhat.boost <- predict(longitudinal.boost, newdata = longitudinal.test.boost, 
-                      n.trees = 5000, type = "response")
-yhat.boost <- ifelse(yhat.boost > 0.5, 1,0)
-table(pred = yhat.boost, truth = longitudinal.test.boost$Demented) # 0.8648649
+#make 10 folds
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=10,labels=FALSE)
+
+cv_err.df <- data.frame(fold = 1:10, logistic_err = rep(0,10),
+                        rf_err = rep(0,10), svm_err = rep(1,10))
+
+for(i in 1:10){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    
+    N <- length(test.data$Demented)
+    rf <- randomForest(Demented ~. , data = train.data, mtry = 3, ntree = 5000) # fit random forest
+    cv_err.df$rf_err[i] <- sum(predict(rf, newdata = test.data) != test.data$Demented) / N
+    
+    # logistic <- # fit logistic regression model 
+    # cv_err.df$logistic_err[i] <- sum(predict(logistic, newdata = test.data) != test.data$Demented) / N
+    
+    # svm <- # fit svm 
+    # cv_err.df$svm_err[i] <- sum(predict(svm, newdata = test.data) != test.data$Demented) / N
+}
+
+cv_err <- cv_err.df %>%
+  select(-c("fold")) %>%
+  colMeans()
 
 ```
+
+
 
 
 
