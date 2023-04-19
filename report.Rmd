@@ -131,7 +131,8 @@ longitudinal.aic.subsets <-
 # make feature-AIC plot
 longitudinal.aic.subsets.plot <- 
   ggplot(longitudinal.aic.subsets, aes(x = variables, y = AIC)) +
-  geom_point(color = "chartreuse4", shape = "X", size = 4) +
+  geom_point(color = "red", shape = "X", size = 4) +
+  geom_line(color ='darkcyan') +
   ggtitle("Longitudinal AIC Subset Selection") +
   labs(x = "Variables", y = "AIC") +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
@@ -198,6 +199,103 @@ graph TD
 ```
 
 
+## CV for selecting best model
+
+```{r}
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
+
+#make 10 folds
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=10,labels=FALSE)
+
+#cv
+
+AIC.df <- data.frame(variables = 1:13)
+for(i in 1:10){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    #train model, 
+    train.best.aic <- bestglm(train.data, family = binomial, IC = "AIC", method ="forward")
+    # train.best <- train.best.aic$BestModel
+    #organize useful data of model
+    # train.aic.subsets <- 
+    #   train.best.aic$Subsets %>% 
+    #   data.frame() %>% 
+    #   cbind(variables = 1:nrow(train.best.aic$Subsets))
+    AIC.df <- cbind(AIC.df, i <- train.best.aic$Subsets$AIC)
+    #make df of iterated AIC 
+    }
+
+AIC.df.long <- melt(AIC.df, id.vars = "variables")
+
+ggplot(AIC.df.long, aes(x = value, y = id)) + 
+    geom_point() +
+    facet_wrap(~ variable)
+
+
+longitudinal.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method = "exhaustive")
+logistic.best <- longitudinal.best.aic$BestModel
+
+# get subset table as a dataframe for future use
+longitudinal.aic.subsets <- 
+  longitudinal.best.aic$Subsets %>% 
+  data.frame() %>% 
+  cbind(variables = 1:nrow(longitudinal.best.aic$Subsets))
+# make feature-AIC plot
+longitudinal.aic.subsets.plot <- 
+  ggplot(longitudinal.aic.subsets, aes(x = variables, y = AIC)) +
+  geom_point(color = "red", shape = "X", size = 4) +
+  geom_line(color ='darkcyan') +
+  ggtitle("Longitudinal AIC Subset Selection") +
+  labs(x = "Variables", y = "AIC") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  theme_minimal() 
+
+```
+
+```{r}
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
+
+#make n folds
+n <- 5
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=5,labels=FALSE)
+
+#vector to store sensititivities
+sens.vec <- c()
+spec.vec <- c()
+#vector to store specificities
+for(i in 1:n){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    #train best logistic model for training partition
+    # train.best.aic <- bestglm(train.data, family = binomial, IC = "AIC", method ="forward")
+    # train.logistic.best <- longitudinal.best.aic$BestModel
+    train.logistic.best <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial)
+    #test model on test partition
+    logistic.best.probs <- predict(train.logistic.best, newdata = test.data, type = "response")
+    #get prediction based on logistic probability output
+    logistic.best.pred <- ifelse(logistic.best.probs > 0.5, 1, 0)
+    # generate confusion table
+    logistic.best.confusion <- table(logistic.best.pred, test.data$Demented)
+    rownames(logistic.best.confusion) <- c('pred 0','pred 1')
+    colnames(logistic.best.confusion) <- c('true 0','true 1')
+    # generate sensitivity and specificity
+    logistic.sens <- logistic.best.confusion[2,2] / sum(logistic.best.confusion[,2])
+    logistic.spec <- logistic.best.confusion[1,1] / sum(logistic.best.confusion[,1])
+    #append to persistent vectors
+    sens.vec <- c(sens.vec,logistic.sens)
+    spec.vec <- c(spec.vec,logistic.spec)
+    
+}
+```
 
 
 ## Introduction: Scope and purpose of your project
@@ -262,13 +360,15 @@ Beyond removing features, the next peculiarity is the longitudinal nature of the
 ### Model Descriptions
 
 Logistic regression:
-This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. 
+This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. Logistic regression fits a function for $n$ variables that outputs a probability between $0$ and $1$ for each observation. It is in this sense that logistic regression is useful for classification, since with that set of probababilities for each observation, we can implement a decision threshold in order to make the prediction bivalent. For instance, we could choose a threshold of 0.6, and the process would go like this: Our logistic model outputs a probability of 0.4 that a particular observation belongs to the target class, and then that observation gets a classification of $0$, denoting that it does not belong to the target class. The logistic model outputs a probability of 0.62 that a particular observation belongs to the target class, and then that observation gets a classification of $1$, denoting that it belongs to the target class. By tuning this threshold we can achieve different characteristics for our model, such as different sensitivities and specificities for the classification. As we lower the threshold for the classification, the sensitivity increases and specificity decreased, and similarly when we raise the threshold, the sensitivity decreases and the specificity increases. As an example, imagine that we decreased the threshold entirely to its lowest possible value, $0$. This would mean that every observation would be classified as within the target class, and it is trivially obvious that $P(A|B = 1.0)$, where $A$ stands for "the observation is classified into the target class," and $B$ stands for "the observation truly belongs to the target class.
+
 [how does it work] 
 [strengths] 
 [weaknesses]
 [applicability for this project]
 [potential limitations]
 [how are we tuning this model]
+Subset selection: we choose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. This 
 
 Boosting decision trees:
 [how does it work] 
@@ -320,6 +420,11 @@ masterplan
 
 
 ## Results and interpretation
+comparison items: 
+[model size] 
+[flexibility] 
+[bias-variance trade-off]
+
 
 ### points to discuss:
 
