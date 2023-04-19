@@ -91,6 +91,57 @@ library("gbm")
 library("randomForest")
 ```
 
+### Methods
+
+We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
+
+#### Logistic Regression
+
+#### Random Forests
+
+Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) data, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes.
+
+
+For each tree we calculate the Out-Of-Bag (OOB) error estimate, the misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on. 
+
+Strengths/weaknessess: interpretability of classification trees versus predictive accuracy og random forests
+
+
+#### Support vector machines
+
+#### Model Selection
+
+
+
+### Results
+
+
+At the cost of interpretability we use random forests for classification instead of regular classification trees. 
+
+```{r}
+set.seed(1337)
+
+p <- ncol(longitudinal.train) - 1 # number of predictors
+N <- nrow(longitudinal.train) # number of training observations
+
+trainx <- select(longitudinal.train, -Demented)
+trainy <- longitudinal.train$Demented
+
+rf <- randomForest(Demented ~., data = longitudinal.train, ntree = 5000, mtry = sqrt(p), importance = TRUE)
+rf
+
+rf.cv <- rfcv(trainx, trainy, cv.fold = 10)
+with(rf.cv, plot(n.var, error.cv, log="x", type="o", lwd=2))
+
+varImpPlot(rf)
+
+preds <- predict(rf)
+train.spec <- sum()
+
+```
+
+
+
 
 ```{r}
 # Boosting, longitudinal
@@ -145,57 +196,75 @@ trainy <- longitudinal.train.boost$Demented
 
 # backwards feature selection
 backwards.gbm <- function(trainx, trainy, B, d, shrinkage, folds) {
-  
+  set.seed(1337)
+  p <- ncol(trainx)
   # Step 1
-  M_k_list <- data.frame(predictors = rep(0, ncol(trainx)), misclass_rate = rep(0, ncol(trainx)), cv_err = rep(0,ncol(trainx)), iterations = rep(0,ncol(trainx)))
-  M_k_list$predictors[ncol(trainx)] <- list(1:ncol(trainx))
-  predictors_k <- c(1:ncol(trainx)) # start with all predictors
+  M_k_list <- data.frame(predictors = rep(0, p), misclass_rate = rep(0, p), 
+                         cv_error = rep(0,p), iterations = rep(0,p), n.pred = c(1:p)) # only save down to d predictors?
+  
+  M_k_list$predictors[p] <- list(1:p) # save all predictors
+  
+  predictors_k <- c(1:p) # start with all predictors
+  
+  M_k_tmp <- gbm(trainy ~ ., data = select(trainx, predictors_k),
+                     distribution = "bernoulli", n.trees = B, interaction.depth = d, 
+                     shrinkage = shrinkage, cv.folds = folds) # fit full model with all predictors
+  
+  M_k_list$misclass_rate[p] <- mean(M_k_tmp$train.error) # save average training error from gbm object
+  M_k_list$predictors[p] <- list(predictors_k) # save corresponding predictors
+  M_k_list$iterations[p] <- gbm.perf(M_k_tmp, plot.it = FALSE, method = "cv") # save best number of trees
+  M_k_list$cv_error[p] <- min(M_k_tmp$cv.error) # save min cv-error from full model
   
   # Step 2
   # Consider all k models that contain all but one of the predictors in M_k for a total of k-1 predictors
 
-  for (k in ncol(trainx):d) { # iterate backwards, minimum d predictors
+  for (k in ncol(trainx):(d+1)) { # iterate backwards, minimum d predictors
   
-    results_k.df <- data.frame(predictors = I(rep(list(rep(0,k-1)), k)), 
-                               misclass_rate = rep(0, k), iterations = rep(0, k)) # k rows, 3 columns, first column is which predictors
+    results_k.df <- data.frame(predictors = I(rep(list(rep(0,k-1)), k)), misclass_rate = rep(0,k),
+                               cv_error = rep(0, k), iterations = rep(0, k)) # k rows, 3 columns, first column is which predictors
     
     for (j in 1:k) { # iterate through predictors_k
       current_predictors <- predictors_k[-j]  # exclude jth predictor
       
       M_k_tmp <- gbm(trainy ~ ., data = select(trainx, current_predictors),
                      distribution = "bernoulli", n.trees = B, interaction.depth = d, 
-                     shrinkage = shrinkage, cv.folds = 5) # fit model with current selection of predictors
+                     shrinkage = shrinkage) # fit model with current selection of predictors
       
-      results_k.df$misclass_rate[j] <- min(M_k_tmp$train.error) # save training error from gbm object
+      results_k.df$misclass_rate[j] <- mean(M_k_tmp$train.error) # save average training error from gbm object
       results_k.df$predictors[j] <- list(current_predictors) # save corresponding predictors
-      results_k.df$iterations[j] <- gbm.perf(M_k_tmp, plot.it = FALSE, method = "cv") # save number of trees
-      
       }
+    # maybe use mean training loss?
+    best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum mean train loss - should we use a different measure?
     
-    best.model_k <- which.min(results_k.df$misclass_rate)# select model with minimum training loss - should we use a different measure?
+    predictors_k <- unlist(results_k.df$predictors[best.model_k]) # get predictors from model M_k, vector of indeces
     
-    predictors_k <- unlist(results_k.df$predictors[best.model_k]) # get predictors from model M_k, preferably vector of indeces
-    
-    M_k_list$predictors[k-1] <- list(predictors_k) # save which predictors give min misclass rate for k predictors
-    M_k_list$misclass_rate[k-1] <- results_k.df$misclass_rate[best.model_k]
-    M_k_list$iterations <- results_k.df$iterations[best.model_k]
-  }
+    M_k_list$misclass_rate[k-1] <- results_k.df$misclass_rate[best.model_k] # save the mean training loss
+    M_k_list$predictors[k-1] <- list(predictors_k) # save which predictors give min mean training loss for k predictors
+    }
   
-  # Takes a lot of compute to run CV on all models when we're only intereseted in the ones we select for each k
-  # for (k in 2:ncol(trainx)){ 
-  #   predictors <- unlist(M_k_list$predictors[k])
-  #   model <- gbm(trainy ~ ., data = select(trainx, all_of(predictors)),
-  #                   distribution = "bernoulli", n.trees = M_k_list$iterations[k], interaction.depth = d, shrinkage = shrinkage, cv.folds = folds, n.cores = 2) # refit models
-  #   M_k_list$cv_err[k] <- model$cv.error # save cv error
-  #  }
-  #return(M_k_list$predictors[which.min(M_k_list$cv_err)]) # return predictors of model with lowest cv error
+  # refit selected models and do cv except last one, already done it 
+  for (k in d:(p-1)) { # only consider models with at least d predictors
+    print(k)
+    predictors <- unlist(M_k_list$predictors[k])
+    model <- gbm(trainy ~ ., data = select(trainx, predictors),
+                     distribution = "bernoulli", n.trees = B, interaction.depth = d, 
+                     shrinkage = shrinkage, cv.folds = folds) # fit model with best combination of k predictors
+    
+    M_k_list$iterations[k] <- gbm.perf(model, plot.it = FALSE, method = "cv") # save best number of trees
+    M_k_list$cv_error[k] <- model$cv.error[M_k_list$iterations[k]] # save cv-error from full model
+    
+  }
   return(M_k_list)
-
-  } 
+} 
 
 set.seed(1337)
-best_subset1 <- backwards.gbm(trainx, trainy, 200, 2, 0.1, 5)
+best_subset1 <- backwards.gbm(trainx, trainy, B = 1000, d = 2, shrinkage = 0.1, folds = 10)
 
+ggplot(best_subset1, aes(x=n.pred)) + 
+  geom_line(aes(y = cv_error, color = "d=2")) +
+  geom_point(aes(x = which.min(cv_error), y = min(cv_error))) +
+    labs(x = "Number of predictors", y = "Cross-validation error") + 
+  theme_minimal()
 ```
 
 
