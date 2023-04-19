@@ -140,10 +140,6 @@ longitudinal.aic.subsets.plot <-
   theme_minimal() 
 ```
 
-## cv missclassification rate
-```{r}
-# cv.glm(longitudinal.train, logistic.best, K = 5)$delta[1]
-```
 
 ## plotting the master-diagram
 
@@ -199,7 +195,7 @@ graph TD
 ```
 
 
-## CV for selecting best model
+## CV for selecting best model with nested feature selection
 
 ```{r}
 #randomize data
@@ -257,6 +253,9 @@ longitudinal.aic.subsets.plot <-
 
 ```
 
+
+## CV for evaluating the performance of fitting the logistic model, using the AIC subset selection on the entire training set
+
 ```{r}
 #randomize data
 longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
@@ -267,8 +266,12 @@ folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=5,labels=FALSE)
 
 #vector to store sensititivities
 sens.vec <- c()
+#specificities
 spec.vec <- c()
-#vector to store specificities
+# cumulative confusion matrix
+logistic.best.confusion.cumulative <- matrix(data = c(0,0,0,0), nrow=2,ncol=2)
+
+
 for(i in 1:n){
     #get test index
     test.index <- which(folds==i,arr.ind=TRUE)
@@ -293,9 +296,32 @@ for(i in 1:n){
     #append to persistent vectors
     sens.vec <- c(sens.vec,logistic.sens)
     spec.vec <- c(spec.vec,logistic.spec)
-    
+    logistic.best.confusion.cumulative <- logistic.best.confusion + logistic.best.confusion.cumulative
 }
+sens.cumulative <- logistic.best.confusion.cumulative[2,2] / sum(logistic.best.confusion.cumulative[,2])
+spec.cumulative <- logistic.best.confusion.cumulative[1,1] / sum(logistic.best.confusion.cumulative[,1])
+accuracy <- c(sens.cumulative, spec.cumulative)
 ```
+
+## Train final model
+```{r}
+longitudinal.logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = longitudinal.train, family = binomial)
+longitudinal.logistic.train.probs <- longitudinal.logistic$fitted.values
+longitudinal.logistic.train.preds <- ifelse(longitudinal.logistic.train.probs > 0.5, 1, 0)
+# generate confusion table for model on training data
+longitudinal.logistic.confusion <- table(longitudinal.logistic.train.preds, longitudinal.train$Demented)
+rownames(longitudinal.logistic.confusion) <- c('pred 0','pred 1')
+colnames(longitudinal.logistic.confusion) <- c('true 0','true 1')
+#sensitivity and specificity
+longitudinal.logistic.sens <- longitudinal.logistic.confusion[2,2] / sum(longitudinal.logistic.confusion[,2])
+longitudinal.logistic.spec <- longitudinal.logistic.confusion[1,1] / sum(longitudinal.logistic.confusion[,1])
+# misclassification error
+longitudinal.logistic.misc <- (longitudinal.logistic.confusion[2,1] + longitudinal.logistic.confusion[1,2]) /
+  sum(longitudinal.logistic.confusion)
+#accuracy vector
+sens_spec_misc <- c(longitudinal.logistic.sens, longitudinal.logistic.spec, longitudinal.logistic.misc)
+```
+
 
 
 ## Introduction: Scope and purpose of your project
