@@ -129,6 +129,7 @@ table(pred = yhat.rf, truth = longitudinal.test$Demented) # 0.8108108
 
 ```{r}
 # Boosting
+
 set.seed(1337)
 longitudinal.train.boost <- mutate(longitudinal.train, Demented = ifelse(Demented == "FALSE", 0,1))
 longitudinal.boost <- gbm(Demented ~., data = longitudinal.train.boost, 
