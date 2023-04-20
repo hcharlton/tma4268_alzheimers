@@ -623,7 +623,6 @@ print(rad_accuracy)
 Both models have an accuracy of approx. 80%, with the radial kernel outperforming the linear.
 The SVM with linear kernel remains unaffected, as a cost of 1 was the default paramter we began with.
 The SVM with radial kernel has approved in accuracy by approx 5% through tuning.
-(I wouldn't say the results are conclusive in determining which model is best)
 
 
 ### Cross-validation for final model selection
@@ -632,7 +631,7 @@ Now we employ 5-fold CV to get an estimate for the test error using our selected
 
 
 ```{r}
-set.seed(1337)
+set.seed(2222)
 
 #randomize data
 longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
@@ -681,6 +680,7 @@ We now perform model assessment by classifying the observations from the test se
 
 ```{r}
 pred.probs <- predict(longitudinal.logistic, newdata = longitudinal.test)
+predictions <- pred.probs > 0.5 # use 0.5 cutoff
 
 # generate confusion table for model on test data
 confusion <- table(predictions, longitudinal.test$Demented)
@@ -700,7 +700,7 @@ confusion
 sens_spec_misc
 ```
 
-The results from the test data show a good predictive accuracy with a misclassification rate of `r misc*100`%. There were `r confusion[1,2] ` false negatives and `r confusion[2,1]` false positive, giving a sensitivity of `r sens*100`% and specificity of `r spec*100`%. This means we're confident about our positive diagnoses and less confident about our negative diagnoses. For the purpose of predicting AD, being uncertain about a negative diagnosis is problematic, as this makes the model unsuitable for use as a pre-screening test. On the other hand, the high specificity counts in favor of the models usefulness.
+The results from the test data show a good predictive accuracy with a misclassification rate of `r round(misc*100)`%. There were `r confusion[1,2] ` false negatives and `r confusion[2,1]` false positive, giving a sensitivity of `r round(sens*100)`% and specificity of `r round(spec*100)`%. This means we're confident about our positive diagnoses and less confident about our negative diagnoses. For the purpose of predicting AD, being uncertain about a negative diagnosis is problematic, as this makes the model unsuitable for use as a pre-screening test. On the other hand, the high specificity counts in favor of the models usefulness.
 
 ### Caveats
 
