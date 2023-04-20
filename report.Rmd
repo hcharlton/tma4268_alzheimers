@@ -434,18 +434,22 @@ ggplot(err.df, aes(x=x)) +
   labs(x = "Iteration", y = "Out-Of-Bag error estimate") + 
   theme_minimal()
 ```
-We see that 5000 trees is enough as the OOB error estimate stabilizes and it is not too slow to fit the model. Now we choose a value for $m$. We do this by computing the OOB error estimate for $m \in \{1,...,12\}$ as the amount of predictors is small enough so it is computationally feasible. 
 
-
+We see that 5000 trees is enough as the OOB error estimate stabilizes and it is not too slow to fit the model. Now we choose a value for $m$. We fit 10 models for each $m \in \{1,...,12\}$ and compare the average OOB error for all values of $m$. Seeing as the amount of predictors is small enough so it is computationally feasible. 
 
 ```{r}
+set.seed(1338)
 B = 5000
 oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
 
 for (m in 1:p){
-  model <- randomForest(Demented ~., data = longitudinal.train,
+  cv_err_m <- matrix(nrow = 10, ncol = B)
+  for (i in 1:10) {
+    model <- randomForest(Demented ~., data = longitudinal.train,
                         mtry = m, ntree = B)
-  oob.df$oob.err[m] <- model$err.rate[B,1] # save oob error
+    cv_err_m[i] <- model$err.rate[B,1]
+  }
+  oob.df$oob.err[m] <- colMeans(cv_err_m) # save oob error
 }
 
 m <- oob.df$m[which.min(oob.df$oob.err)] # save best m value
@@ -457,7 +461,7 @@ ggplot(data = oob.df, aes(x = m)) +
   labs(x = "m", y = "OOB error")
 ```
 
-Here we see that the best value for $m$ is $m = $ `oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = 3$ randomly chosen predictors. 
+Here we see that the best value for $m$ is $m = $ `r oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r oob.df$m[which.min(oob.df$oob.err)]` randomly chosen predictors. 
 
 
 ### SVM
@@ -485,7 +489,7 @@ for(i in 1:10){
     train.data <- longitudinal.train.rand[-test.index, ]
     
     N <- length(test.data$Demented)
-    rf <- randomForest(Demented ~. , data = train.data, mtry = 3, ntree = 5000) # fit random forest
+    rf <- randomForest(Demented ~. , data = train.data, mtry = m, ntree = B) # fit random forest
     cv_err.df$rf_err[i] <- sum(predict(rf, newdata = test.data) != test.data$Demented) / N
     
     # logistic <- # fit logistic regression model 
