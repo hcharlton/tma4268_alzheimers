@@ -202,7 +202,6 @@ The SVM with linear kernel remains unaffected, as a cost of 1 was the default pa
 The SVM with radial kernel has approved in accuracy by approx 5% through tuning.
 (I wouldn't say the results are conclusive in determining which model is best)
 
-(I think it would be wise to omit this section, can't reproduce results and it'll just clutter the project)
 This section is about how the SVM performs when only considering deltas/removing deltas.
 First we need to create two new training sets from the data set. One using categorical variables and deltas, 
 and one using categorical variables without deltas.
