@@ -211,7 +211,7 @@ Below is an outline of the overall strategy for how we fitted the logistic model
 
 Classification threshold: We chose a probability threshold of 0.5 for this logistic model (see above for explanation of significance). This is somewhat arbitrary, but we did not have the time to implement a calibration for this. In the future, we could divide our data into a training, validation, and test set, and then use the validation set to tune the probability threshold with a desired sensitivity and specificity balance in mind. 
 
-Subset selection: we chose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. AIC was then used using the $bestglm$ package in R using the entire training set. The selected features were Age, MMSE, nWBV, and dMMSE. A plot of the AIC as a function of the number of variables is included below titled "Logistic AIC Subset Selection."
+Subset selection: we chose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. AIC was then used using the $bestglm$ package in R using the entire training set. We chose to use exhaustive feature selection since the time of computation is not problematic for this number of features and observations. The selected features were Age, MMSE, nWBV, and dMMSE. A plot of the AIC as a function of the number of variables is included below titled "Logistic AIC Subset Selection," showing that around 4 or 5 variables is the local minimum, which we prefer. 
 
 CV: We used cross validation mainly for getting an idea of how much the misclassification error rate, sensitivity, and specificity varied. While this was not used for model selection, it provided to us a sense of how much these measures could vary. 
 
@@ -355,6 +355,7 @@ comparison items:
 ### Logistic regression
 
 #### Select optimal features
+Here we see that the ideal 
 ```{r}
 # use AIC to select features
 longitudinal.logistic.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
@@ -668,11 +669,11 @@ cv_err <- cv_err.df %>%
 cv_err
 ```
 
-We see that the logistic regression model scores the lowest CV-error of our three models. However random forest scores very similarly. Additionaly through pretesting the code we noticed that the result (i.e. which classifier scores lowest) from the 5-fold CV varies depening on the splits made. This may be an indication of instability in our models as a result of the small amount of observations. Due to time constraints in finalizing this project we do not discuss this in detail, though it is an important remark. 
+We see that the logistic regression model scores the lowest CV-error of our three models. However random forest scores very similarly. Additionally through pretesting the code we noticed that the result (i.e. which classifier scores lowest) from the 5-fold CV varies depends on the splits made. This may be an indication of instability in our models as a result of the small amount of observations. Due to time constraints in finalizing this project we do not discuss this in detail, though it is an important remark. 
 
-Besides the issue of CV-uncertainty, the logistic model and random forests seem to outperform SVM. For the logistic model this may be due to the feature selection done prior to fitting the model. Such a feature selection will increase the bias of the model but may decrease the variance if some of the predictors are introducing noise. This seems to be the case for our model. On the other hand, the accuracy of random forests may be due to the increased predictive accuray achieved whith bootstrap aggregation and decorrelation of the grown trees.
+Besides the issue of CV-uncertainty, the logistic model and random forests seem to outperform SVM. For the logistic model this may be due to the feature selection done prior to fitting the model. Such a feature selection will increase the bias of the model but may decrease the variance if some of the predictors are introducing noise, ultimately leading to a better test-set performance. This seems to be the case for our logistic model. On the other hand, the accuracy of random forests may be due to the increased predictive accuracy achieved with bootstrap aggregation and decorrelation of the grown trees.
 
-Though we cannot conclude that the logistic model outperforms random forests and SVM we perform model assessment using logistic regression, keeping in mind that our model selection is uncertian. This emulates real-world efficacy as all test observations were left out of the model-selection process. 
+Though we cannot confidently conclude that the logistic model outperforms random forests and SVM, we performed model assessment on the held out test set using logistic regression, keeping in mind that our model selection is uncertain. This assessment emulates real-world efficacy as all test observations were excluded from the model-selection process. 
 
 ### Model assessment
 
