@@ -59,7 +59,12 @@ library('boot')
 setwd("/Users/chcharlton/NTNU/statLearning/tma4268_alzheimers")
 ```
 
+## Introduction: Scope and purpose of your project
 
+The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withdstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. 
+
+
+## Descriptive data analysis/statistics
 
 ## Data Processing
 
@@ -74,6 +79,7 @@ longitudinal_deltas <- longitudinal.df %>%
             dASF = (last(ASF) - first(ASF)) / last(Visit),
             dAge = (last(Age) - first(Age)) / last(Visit)) %>% 
   na.omit()
+  
 baseline_with_deltas <- longitudinal.df %>%
   filter(Visit == 1) %>%
   left_join(longitudinal_deltas, by = c("Subject.ID")) %>%
@@ -112,9 +118,14 @@ boxplots <-
   geom_boxplot(aes(fill=Demented)) +
   theme_minimal()
 boxplots.composite <- boxplots + facet_wrap( ~ variable, ncol=4, scales = 'free_y')
+pair_plot
+
+pair_plot.deltas
 
 
+boxplots.composite
 ```
+
 
 
 
@@ -139,11 +150,6 @@ longitudinal.aic.subsets.plot <-
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
   theme_minimal() 
 ```
-
-
-
-
-
 
 ## CV for evaluating the performance of fitting the logistic model, using previously calculated AIC feature set
 
@@ -225,6 +231,11 @@ sens_spec_misc
 ```
 
 
+
+### Results
+
+
+
 ## Train final model
 ```{r}
 # train logistic model on entire training set
@@ -303,23 +314,89 @@ graph TD
 ")
 ```
 
+### Random forest
+```{r}
+set.seed(1337)
+
+p <- ncol(longitudinal.train) - 1 # number of predictors
+N <- nrow(longitudinal.train) # number of training observations
 
 
-## Introduction: Scope and purpose of your project
+trainx <- select(longitudinal.train, -Demented)
+trainy <- longitudinal.train$Demented
 
-The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withdstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. 
+rf <- randomForest(Demented ~., data = longitudinal.train, ntree = 5000, mtry = sqrt(p), importance = TRUE)
+err.df <- data.frame(x=1:5000, err = rf$err.rate[,1]) 
+
+ggplot(err.df, aes(x=x)) + 
+  geom_line(aes(y = err)) + 
+  labs(x = "Iteration", y = "Out-Of-Bag error estimate") + 
+  theme_minimal()
+```
+We see that 5000 trees is enough as the OOB error estimate stabilizes and it is not too slow to fit the model. Now we choose a value for $m$. We do this by computing the OOB error estimate for $m \in \{1,...,12\}$ as the amount of predictors is small enough so it is computationally feasible. 
 
 
-## Descriptive data analysis/statistics
 
 
 ```{r}
-pair_plot
+B = 5000
+oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
 
-pair_plot.deltas
+for (m in 1:p){
+  model <- randomForest(Demented ~., data = longitudinal.train,
+                        mtry = m, ntree = B)
+  oob.df$oob.err[m] <- model$err.rate[B,1] # save oob error
+}
 
-boxplots.composite
+m <- oob.df$m[which.min(oob.df$oob.err)] # save best m value
+
+ggplot(data = oob.df, aes(x = m)) + 
+  geom_line(aes(y = oob.err)) + 
+  geom_point(aes(y = oob.err), shape = 21, colour = "black", fill = "white", size = 2.8 ) +
+  scale_x_continuous(breaks = seq(1,p,2)) +
+  labs(x = "m", y = "OOB error")
 ```
+
+Here we see that the best value for $m$ is $m = $ `oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = 3$ randomly chosen predictors. 
+
+
+
+### CV each method
+
+```{r}
+set.seed(1337)
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
+
+#make 10 folds
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=10,labels=FALSE)
+
+cv_err.df <- data.frame(fold = 1:10, logistic_err = rep(0,10),
+                        rf_err = rep(0,10), svm_err = rep(1,10))
+
+for(i in 1:10){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    
+    N <- length(test.data$Demented)
+    rf <- randomForest(Demented ~. , data = train.data, mtry = 3, ntree = 5000) # fit random forest
+    cv_err.df$rf_err[i] <- sum(predict(rf, newdata = test.data) != test.data$Demented) / N
+    
+    # logistic <- # fit logistic regression model 
+    # cv_err.df$logistic_err[i] <- sum(predict(logistic, newdata = test.data) != test.data$Demented) / N
+    
+    # svm <- # fit svm 
+    # cv_err.df$svm_err[i] <- sum(predict(svm, newdata = test.data) != test.data$Demented) / N
+}
+
+cv_err <- cv_err.df %>%
+  select(-c("fold")) %>%
+  colMeans()
+```
+
 
 
 
@@ -355,13 +432,12 @@ nWBV: Normalized whole-brain volume. This feature is measured as the percent of 
 
 
 ## Methods
-
+We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
 
 ### Data processing
 The source data that we accessed had a number of peculiarities that needed to be resolved before we could use it. First and foremost, we noted that there were some features that were not feasible to use. These included Subject.ID, MRI.ID, Hand, and SES. Subject.ID is not useful to us as it is simply a unique identifier of the patient. This might have been useful if we were integrating this data into a larger context of data, but here it is not applicable. MRI.ID is similarly not useful since it is a unique identifier of the particular MRI scan. Following guidelines for tidy data, we are keeping each row as a unique observation (wide format) and so this is not necessary. Hand is a feature stating the dominant hand of the patient, and since all of the patients in this study were right-handed, it is not a valid feature to use as a predictor. SES denotes the socioeconomic status of the patient. This would have been an interesting feature to examine for predictive capacity, but it was not exhaustively collected like the other features and so many of the observations had this feature missing. Our two options given this were either to (1) throw out SES as a feature, or (2) remove observations that had this feature missing. Since such a large number of the observations were missing SES, we determined that it would be better to sacrifice it as a feature and preserve the size of our observation set. 
 
 Beyond removing features, the next peculiarity is the longitudinal nature of the dataset, meaning that it includes multiple observations of the same individual at different points in time. The methods that we have learned in this course do not pertain to time-series data, so our solution was to add features, where relevant, that capture the basic properties of the time series information. MMSE, eTIV, nWBV, and ASF were use to create delta features (denoted as dMMSE, deTIV, etc) that represent the difference between the first and last observations of a particular feature for a particular patient, standardized with respect for time. For example, if a particular patient has their first MMSE recording stated as 28 and last as 22 with 300 days in between the measurements, their dMMSE is $\frac{28-22}{300} = 0.02$. This allows us to use the information conveyed by the longitudinal data while still using the methods from this course. 
-
 
 
 ### Model Descriptions
@@ -377,13 +453,17 @@ This method was chosen as a candidate due to its continued use in the medical fi
 [how are we tuning this model]
 Subset selection: we choose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. This 
 
-Boosting decision trees:
-[how does it work] 
-[strengths] 
-[weaknesses]
-[applicability for this project]
-[potential limitations]
-[how are we tuning this model]
+Random forests:
+We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
+
+This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
+
+We implement Random Forests through the R package `randomForest`.
+
+Random Forests can be tuned by two parameters, the number of trees $B$ and the amount of predictors to consider for each split $m$. The number of trees used to fit a random forest does not impact the bias-variance tradeoff as long as its high enough as high $B$ does not lead to overfitting [ISLR]. Thus we may plot the cumulative OOB error estimate for a fitted Random Forest and see where an increased number of trees give no error decrease. The OOB error estimate is the aggregated misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on.
+
+For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a numer of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
+
 
 Support vector machines:
 [how does it work] 
@@ -395,6 +475,9 @@ Support vector machines:
 
 
 ### Model Selection 
+To select a model we need to consider all possible models and make a decision based on some measure of goodness-of-fit. For this measure we use the misclassification rate to compute a cross-validated error estimate for one model of each classifier. To select one model for of each classifier for comparison, we use different methods for each classifier. A graphical representation of our model selection algorithm is shown below. We have chosen to initially only compare models of the same classifier as this seperates the search space and reduces the amount of computations considerably.
+
+
 
 Here we will provide an overview of the process we followed to arrive at a final model. 
 
@@ -418,9 +501,6 @@ arbitrary hyper parameters.
 8. Evaluate best model on test partition. 
 
 
-```{r}
-masterplan
-```
 ## Model evaluation 
 [what's our loss function]
 [how do we propose to compare the best models, once we have them]
