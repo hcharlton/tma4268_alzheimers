@@ -53,11 +53,6 @@ library('webshot')
 library('boot')
 ```
 
-## The block below is specific to Henry's Computer
-```{r}
-#specific to Henry's computer
-setwd("/Users/chcharlton/NTNU/statLearning/tma4268_alzheimers")
-```
 
 ## Introduction: Scope and purpose of your project
 
@@ -66,7 +61,42 @@ The goal of this project is to develop a model that can classify the diagnosis o
 
 ## Descriptive data analysis/statistics
 
-## Data Processing
+### Description of Features:
+
+MRI.ID: The unique identifier of an MRI scan. This feature was not used. 
+
+Group: The group that the patient was classified in the across the various scans. Possible values are "Undemented," denoting a patient without symptoms of dementia throughout all scans, "Demented" denoting a patient with symptoms of dementia across all scans, or "Converted," denoting someone who began without symptoms of dementia but developed them at a further scan. We chose to throw away "Converted," since our primary goal is to develop a classification model for patients who either have dementia or not, and the Converted class complicates this since patients in this class would fall into different categories at different times. 
+
+Visit: The order of the visit in which the scan was done, indexed from 1. This data was not used for our model, but was used for processing the data. 
+
+MR Delay: The number of days since the previous scan. Marked as 0 for the initial scan. Similarly, this data was not used for the model directly, but helped us for data processing as will be described later. 
+
+M.F: Categorical variable for male or female patients at birth. M denotes male, F denotes female. This binary variable was included in the models, however feature selection points to it not being a decisive feature for classification. 
+
+Hand: The patient's dominant hand. All of the patients were right-handed. This feature was thrown out. 
+
+EDUC: The education level of the patient, measured in years (including elementary school). 
+
+SES: "Socioeconomic status as assessed by the Hollingshead Index of Social Position and classified into categories from 1 (highest status) to 5 (lowest status) (Hollingshead, 1957)" 
+The socioeconomic status of the patients as classified by the Hollingshead Index. Values range from 1 (most elite status) to 5 (lowest status). This feature was thrown out since it as not consistently recorded accross the patients.  
+
+MMSE: The score of the Mini Mental State Examination. Ranges from worst (0) to best (30), and represents a measure of cognitive impairment. An example of this test is attached as an appendix. We determined from this example the that score is objective, and as such is relevant to use for an analysis where the goal is to reduce pressure on medical professionals. Due to the objective nature of the exam, it could theoretically be performed by an automated system. 
+
+CDR: The patient's clinical dementia rating, as assessed by a medical professional. Ranges from 0 to 3, with any score above 0 representing a form of dementia. This is our target feature for classification, which we transformed into a binary variable. 
+
+ASF: The atlas scaling factor of the patient. A measure standardizing the intra-cranial volume. 
+
+eTIV: Estimated total intracranial volume. 
+
+nWBV: Normalized whole-brain volume. This feature is measured as the percent of the possible total volume that is detected as grey or white matter. 
+
+
+### Data Processing
+The source data that we accessed had a number of peculiarities that needed to be resolved before we could use it. First and foremost, we noted that there were some features that were not feasible to use. These included Subject.ID, MRI.ID, Hand, and SES. Subject.ID is not useful to us as it is simply a unique identifier of the patient. This might have been useful if we were integrating this data into a larger context of data, but here it is not applicable. MRI.ID is similarly not useful since it is a unique identifier of the particular MRI scan. Following guidelines for tidy data, we are keeping each row as a unique observation (wide format) and so this is not necessary. Hand is a feature stating the dominant hand of the patient, and since all of the patients in this study were right-handed, it is not a valid feature to use as a predictor. SES denotes the socioeconomic status of the patient. This would have been an interesting feature to examine for predictive capacity, but it was not exhaustively collected like the other features and so many of the observations had this feature missing. Our two options given this were either to (1) throw out SES as a feature, or (2) remove observations that had this feature missing. Since such a large number of the observations were missing SES, we determined that it would be better to sacrifice it as a feature and preserve the size of our observation set. 
+
+Beyond removing features, the next peculiarity is the longitudinal nature of the dataset, meaning that it includes multiple observations of the same individual at different points in time. The methods that we have learned in this course do not pertain to time-series data, so our solution was to add features, where relevant, that capture the basic properties of the time series information. MMSE, eTIV, nWBV, and ASF were use to create delta features (denoted as dMMSE, deTIV, etc) that represent the difference between the first and last observations of a particular feature for a particular patient, standardized with respect for time. For example, if a particular patient has their first MMSE recording stated as 28 and last as 22 with 300 days in between the measurements, their dMMSE is $\frac{28-22}{300} = 0.02$. This allows us to use the information conveyed by the longitudinal data while still using the methods from this course. 
+
+
 
 ```{r}
 # Patient is demented if CDR is > 0
@@ -95,7 +125,7 @@ longitudinal.train <- na.omit(baseline_with_deltas[l.train.indices,])
 longitudinal.test <- na.omit(baseline_with_deltas[-l.train.indices,])
 ```
 
-## EDA: 
+### EDA: 
 
 ```{r}
 # select some quantitative data and plot the pairs of it
@@ -127,9 +157,137 @@ boxplots.composite
 ```
 
 
+## Methods
+We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
+
+### Model Descriptions
+
+#### Logistic regression
+
+This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. Logistic regression fits a function for $n$ variables that outputs a probability between $0$ and $1$ for each observation. It is in this sense that logistic regression is useful for classification, since with that set of probababilities for each observation, we can implement a decision threshold in order to make the prediction bivalent. For instance, we could choose a threshold of 0.6, and the process would go like this: Our logistic model outputs a probability of 0.4 that a particular observation belongs to the target class, and then that observation gets a classification of $0$, denoting that it does not belong to the target class. The logistic model outputs a probability of 0.62 that a particular observation belongs to the target class, and then that observation gets a classification of $1$, denoting that it belongs to the target class. By tuning this threshold we can achieve different characteristics for our model, such as different sensitivities and specificities for the classification. As we lower the threshold for the classification, the sensitivity increases and specificity decreased, and similarly when we raise the threshold, the sensitivity decreases and the specificity increases. As an example, imagine that we decreased the threshold entirely to its lowest possible value, $0$. This would mean that every observation would be classified as within the target class, and it is trivially obvious that $P(A|B = 1.0)$, where $A$ stands for "the observation is classified into the target class," and $B$ stands for "the observation truly belongs to the target class.
+
+Subset selection: we choose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. This 
+
+#### Random forests
+
+We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
+
+This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
+
+We implement Random Forests through the R package `randomForest`.
+
+Random Forests can be tuned by two parameters, the number of trees $B$ and the amount of predictors to consider for each split $m$. The number of trees used to fit a random forest does not impact the bias-variance tradeoff as long as its high enough as high $B$ does not lead to overfitting [ISLR]. Thus we may plot the cumulative OOB error estimate for a fitted Random Forest and see where an increased number of trees give no error decrease. The OOB error estimate is the aggregated misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on.
+
+For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a numer of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
 
 
-## select optimal features
+#### Support vector machines
+
+[how does it work] 
+[strengths] 
+[weaknesses]
+[applicability for this project]
+[potential limitations]
+[how are we tuning this model]
+
+
+### Model Selection 
+To select a model we need to consider all possible models and make a decision based on some measure of goodness-of-fit. For this measure we use the misclassification rate to compute a cross-validated error estimate for one model of each classifier. To select one model for of each classifier for comparison, we use different methods for each classifier. A graphical representation of our model selection algorithm is shown below. We have chosen to initially only compare models of the same classifier as this seperates the search space and reduces the amount of computations considerably.
+
+```{r, echo=FALSE}
+masterplan <- 
+mermaid("
+graph TD
+    start[source data]
+    process[processed data]
+    start --> process[processed data]
+    process --> a0
+    process --> a1
+
+
+    a0 -->  b0 
+    a0 -->  b1 
+    a0 -->  b2
+    a0[training data]
+    a1[test data]
+    b0[SVM]
+    b1[Boosting]
+    b2[Logistic]
+    c0[subsetted SVM]
+    c1[subsetted Boosting]
+    
+    d0[best SVM]
+    d1[best Boosting]
+    d2[best Logistic]
+    
+    e0[choose best of best models with CV]
+    
+    b0 --> |feat param sensitivity| c0
+    b1 --> |feat param sensitivity| c1
+    b2 --> |feature selection| d2
+    
+    c0 --> |parameter tuning| d0
+    c1 --> |parameter tuning| d1
+    
+
+
+
+    a1 --> best_test
+    d0 --> e0
+    d1 --> e0
+    d2 --> e0
+    e0 --> best_test
+    best_test[evaluate finaln model on test data]
+    best_test --> final[interpretation]
+")
+```
+
+
+
+Here we will provide an overview of the process we followed to arrive at a final model. 
+
+1. Collect the source data. 
+
+2. Process data: select relevant features, add deltas, remove time series data.  
+
+3. Separate processed data into training and test partitions.
+
+3. Choose a small set of hyperparameters randomly for selected models, test feature selection sensitivity to this test.
+
+4. Once feature selection is demonstrated to be insensitive to hyperparameters, proceed with feature selection and
+arbitrary hyper parameters.
+
+5. Tune hyperparameters (as applicable)
+
+6. Compare SVM, Boosting, and Logistic models by simulatentously testing with k-folded training data. 
+
+7. Select best model from the three.
+
+8. Evaluate best model on test partition. 
+
+
+```{r}
+masterplan
+```
+
+
+
+
+
+## Model evaluation 
+[what's our loss function]
+[how do we propose to compare the best models, once we have them]
+
+## Results and interpretation
+comparison items: 
+[model size] 
+[flexibility] 
+[bias-variance trade-off]
+
+
+### Logistic regression
+
+#### Select optimal features
 ```{r}
 # use AIC to select features
 longitudinal.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
@@ -151,7 +309,7 @@ longitudinal.aic.subsets.plot <-
   theme_minimal() 
 ```
 
-## CV for evaluating the performance of fitting the logistic model, using previously calculated AIC feature set
+#### CV for evaluating the performance of fitting the logistic model, using previously calculated AIC feature set
 
 ```{r}
 set.seed(1337)
@@ -232,11 +390,7 @@ sens_spec_misc
 
 
 
-### Results
-
-
-
-## Train final model
+#### Train final model
 ```{r}
 # train logistic model on entire training set
 longitudinal.logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = longitudinal.train, family = binomial)
@@ -261,59 +415,6 @@ sens_spec_misc
 
 
 
-## plotting the master-diagram
-
-```{r}
-masterplan <- 
-mermaid("
-graph TD
-    start[source data]
-    process[processed data]
-    start --> process[processed data]
-    process --> a0
-    process --> a1
-
-
-    a0 -->  b0 
-    a0 -->  b1 
-    a0 -->  b2
-    a0[training data]
-    a1[test data]
-    b0[SVM]
-    b1[Boosting]
-    b2[Logistic]
-    c0[subsetted SVM]
-    c1[subsetted Boosting]
-    
-    d0[best SVM]
-    d1[best Boosting]
-    d2[best Logistic]
-    
-    e0[choose best of best models with CV]
-    
-    b0 --> |feat param sensitivity| c0
-    b1 --> |feat param sensitivity| c1
-    b2 --> |feature selection| d2
-    
-    c0 --> |parameter tuning| d0
-    c1 --> |parameter tuning| d1
-    
-
-
-
-    a1 --> best_test
-    d0 --> e0
-    d1 --> e0
-    d2 --> e0
-    e0 --> best_test
-    best_test[evaluate finaln model on test data]
-    best_test --> final[interpretation]
-    
-
-    
-")
-```
-
 ### Random forest
 ```{r}
 set.seed(1337)
@@ -337,7 +438,6 @@ We see that 5000 trees is enough as the OOB error estimate stabilizes and it is 
 
 
 
-
 ```{r}
 B = 5000
 oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
@@ -358,6 +458,9 @@ ggplot(data = oob.df, aes(x = m)) +
 ```
 
 Here we see that the best value for $m$ is $m = $ `oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = 3$ randomly chosen predictors. 
+
+
+### SVM
 
 
 
@@ -398,119 +501,6 @@ cv_err <- cv_err.df %>%
 ```
 
 
-
-
-
-### Description of Features:
-
-MRI.ID: The unique identifier of an MRI scan. This feature was not used. 
-
-Group: The group that the patient was classified in the across the various scans. Possible values are "Undemented," denoting a patient without symptoms of dementia throughout all scans, "Demented" denoting a patient with symptoms of dementia across all scans, or "Converted," denoting someone who began without symptoms of dementia but developed them at a further scan. We chose to throw away "Converted," since our primary goal is to develop a classification model for patients who either have dementia or not, and the Converted class complicates this since patients in this class would fall into different categories at different times. 
-
-Visit: The order of the visit in which the scan was done, indexed from 1. This data was not used for our model, but was used for processing the data. 
-
-MR Delay: The number of days since the previous scan. Marked as 0 for the initial scan. Similarly, this data was not used for the model directly, but helped us for data processing as will be described later. 
-
-M.F: Categorical variable for male or female patients at birth. M denotes male, F denotes female. This binary variable was included in the models, however feature selection points to it not being a decisive feature for classification. 
-
-Hand: The patient's dominant hand. All of the patients were right-handed. This feature was thrown out. 
-
-EDUC: The education level of the patient, measured in years (including elementary school). 
-
-SES: "Socioeconomic status as assessed by the Hollingshead Index of Social Position and classified into categories from 1 (highest status) to 5 (lowest status) (Hollingshead, 1957)" 
-The socioeconomic status of the patients as classified by the Hollingshead Index. Values range from 1 (most elite status) to 5 (lowest status). This feature was thrown out since it as not consistently recorded accross the patients.  
-
-MMSE: The score of the Mini Mental State Examination. Ranges from worst (0) to best (30), and represents a measure of cognitive impairment. An example of this test is attached as an appendix. We determined from this example the that score is objective, and as such is relevant to use for an analysis where the goal is to reduce pressure on medical professionals. Due to the objective nature of the exam, it could theoretically be performed by an automated system. 
-
-CDR: The patient's clinical dementia rating, as assessed by a medical professional. Ranges from 0 to 3, with any score above 0 representing a form of dementia. This is our target feature for classification, which we transformed into a binary variable. 
-
-ASF: The atlas scaling factor of the patient. A measure standardizing the intra-cranial volume. 
-
-eTIV: Estimated total intracranial volume. 
-
-nWBV: Normalized whole-brain volume. This feature is measured as the percent of the possible total volume that is detected as grey or white matter. 
-
-
-## Methods
-We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
-
-### Data processing
-The source data that we accessed had a number of peculiarities that needed to be resolved before we could use it. First and foremost, we noted that there were some features that were not feasible to use. These included Subject.ID, MRI.ID, Hand, and SES. Subject.ID is not useful to us as it is simply a unique identifier of the patient. This might have been useful if we were integrating this data into a larger context of data, but here it is not applicable. MRI.ID is similarly not useful since it is a unique identifier of the particular MRI scan. Following guidelines for tidy data, we are keeping each row as a unique observation (wide format) and so this is not necessary. Hand is a feature stating the dominant hand of the patient, and since all of the patients in this study were right-handed, it is not a valid feature to use as a predictor. SES denotes the socioeconomic status of the patient. This would have been an interesting feature to examine for predictive capacity, but it was not exhaustively collected like the other features and so many of the observations had this feature missing. Our two options given this were either to (1) throw out SES as a feature, or (2) remove observations that had this feature missing. Since such a large number of the observations were missing SES, we determined that it would be better to sacrifice it as a feature and preserve the size of our observation set. 
-
-Beyond removing features, the next peculiarity is the longitudinal nature of the dataset, meaning that it includes multiple observations of the same individual at different points in time. The methods that we have learned in this course do not pertain to time-series data, so our solution was to add features, where relevant, that capture the basic properties of the time series information. MMSE, eTIV, nWBV, and ASF were use to create delta features (denoted as dMMSE, deTIV, etc) that represent the difference between the first and last observations of a particular feature for a particular patient, standardized with respect for time. For example, if a particular patient has their first MMSE recording stated as 28 and last as 22 with 300 days in between the measurements, their dMMSE is $\frac{28-22}{300} = 0.02$. This allows us to use the information conveyed by the longitudinal data while still using the methods from this course. 
-
-
-### Model Descriptions
-
-Logistic regression:
-This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. Logistic regression fits a function for $n$ variables that outputs a probability between $0$ and $1$ for each observation. It is in this sense that logistic regression is useful for classification, since with that set of probababilities for each observation, we can implement a decision threshold in order to make the prediction bivalent. For instance, we could choose a threshold of 0.6, and the process would go like this: Our logistic model outputs a probability of 0.4 that a particular observation belongs to the target class, and then that observation gets a classification of $0$, denoting that it does not belong to the target class. The logistic model outputs a probability of 0.62 that a particular observation belongs to the target class, and then that observation gets a classification of $1$, denoting that it belongs to the target class. By tuning this threshold we can achieve different characteristics for our model, such as different sensitivities and specificities for the classification. As we lower the threshold for the classification, the sensitivity increases and specificity decreased, and similarly when we raise the threshold, the sensitivity decreases and the specificity increases. As an example, imagine that we decreased the threshold entirely to its lowest possible value, $0$. This would mean that every observation would be classified as within the target class, and it is trivially obvious that $P(A|B = 1.0)$, where $A$ stands for "the observation is classified into the target class," and $B$ stands for "the observation truly belongs to the target class.
-
-[how does it work] 
-[strengths] 
-[weaknesses]
-[applicability for this project]
-[potential limitations]
-[how are we tuning this model]
-Subset selection: we choose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. This 
-
-Random forests:
-We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
-
-This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
-
-We implement Random Forests through the R package `randomForest`.
-
-Random Forests can be tuned by two parameters, the number of trees $B$ and the amount of predictors to consider for each split $m$. The number of trees used to fit a random forest does not impact the bias-variance tradeoff as long as its high enough as high $B$ does not lead to overfitting [ISLR]. Thus we may plot the cumulative OOB error estimate for a fitted Random Forest and see where an increased number of trees give no error decrease. The OOB error estimate is the aggregated misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on.
-
-For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a numer of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
-
-
-Support vector machines:
-[how does it work] 
-[strengths] 
-[weaknesses]
-[applicability for this project]
-[potential limitations]
-[how are we tuning this model]
-
-
-### Model Selection 
-To select a model we need to consider all possible models and make a decision based on some measure of goodness-of-fit. For this measure we use the misclassification rate to compute a cross-validated error estimate for one model of each classifier. To select one model for of each classifier for comparison, we use different methods for each classifier. A graphical representation of our model selection algorithm is shown below. We have chosen to initially only compare models of the same classifier as this seperates the search space and reduces the amount of computations considerably.
-
-
-
-Here we will provide an overview of the process we followed to arrive at a final model. 
-
-1. Collect the source data. 
-
-2. Process data: select relevant features, add deltas, remove time series data.  
-
-3. Separate processed data into training and test partitions.
-
-3. Choose a small set of hyperparameters randomly for selected models, test feature selection sensitivity to this test.
-
-4. Once feature selection is demonstrated to be insensitive to hyperparameters, proceed with feature selection and
-arbitrary hyper parameters.
-
-5. Tune hyperparameters (as applicable)
-
-6. Compare SVM, Boosting, and Logistic models by simulatentously testing with k-folded training data. 
-
-7. Select best model from the three.
-
-8. Evaluate best model on test partition. 
-
-
-## Model evaluation 
-[what's our loss function]
-[how do we propose to compare the best models, once we have them]
-
-
-## Results and interpretation
-comparison items: 
-[model size] 
-[flexibility] 
-[bias-variance trade-off]
 
 
 ### points to discuss:
