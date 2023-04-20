@@ -443,11 +443,11 @@ B = 5000
 oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
 
 for (m in 1:p){
-  cv_err_m <- matrix(nrow = 10, ncol = B)
+  oob_err_m <- matrix(nrow = 10, ncol = B)
   for (i in 1:10) {
     model <- randomForest(Demented ~., data = longitudinal.train,
                         mtry = m, ntree = B)
-    cv_err_m[i] <- model$err.rate[B,1]
+    oob_err_m[i] <- model$err.rate[B,1]
   }
   oob.df$oob.err[m] <- colMeans(cv_err_m) # save oob error
 }
