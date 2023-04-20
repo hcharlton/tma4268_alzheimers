@@ -616,7 +616,7 @@ for(i in 1:n.fold){
     cv_err.df$svm_err[i] <- sum(predict(svm.model, newdata = test.data) != test.data$Demented) / N
 }
 
-cv_err.df2 <- cv_err.df %>%
+cv_err <- cv_err.df %>%
   select(-c("fold")) %>%
   colMeans()
 
