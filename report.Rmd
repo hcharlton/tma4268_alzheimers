@@ -474,13 +474,13 @@ B = 5000
 oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
 
 for (m in 1:p){
-  cv_err_m <- matrix(nrow = 10, ncol = B)
+  oob_err_m <- matrix(nrow = 10, ncol = B)
   for (i in 1:10) {
     model <- randomForest(Demented ~., data = longitudinal.train,
                         mtry = m, ntree = B)
-    cv_err_m[i] <- model$err.rate[B,1]
+    oob_err_m[i] <- model$err.rate[B,1]
   }
-  oob.df$oob.err[m] <- colMeans(cv_err_m) # save oob error
+  oob.df$oob.err[m] <- colMeans(oob_err_m) # save oob error
 }
 
 m <- oob.df$m[which.min(oob.df$oob.err)] # save best m value
@@ -492,7 +492,7 @@ ggplot(data = oob.df, aes(x = m)) +
   labs(x = "m", y = "OOB error")
 ```
 
-Here we see that the best value for $m$ is $m = $ `r oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r oob.df$m[which.min(oob.df$oob.err)]` randomly chosen predictors. 
+Here we see that the best value for $m$ is $m = $ `r m`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r m` randomly chosen predictors. 
 
 
 ### SVM
@@ -518,7 +518,7 @@ Both kernels perform decent, with accuracy > 75%. The linear kernel performs sli
 under deafult choice of parameters. 
 
 C is the only tuning parameter for a linear kernel, so we start there.
-Here we will perform 15 iterations testing values of C in [10^-4,10^3] (by orders of magnitude).
+Here we will perform 15 iterations testing values of C in [10^-4 , 10^3] (by orders of magnitude).
 For each run, we will choose the best C. 
 ```{r}
 set.seed(58008)
@@ -583,20 +583,24 @@ The SVM with linear kernel remains unaffected, as a cost of 1 was the default pa
 The SVM with radial kernel has approved in accuracy by approx 5% through tuning.
 (I wouldn't say the results are conclusive in determining which model is best)
 
-### CV each method
+### Cross-validation for final model selection
+
+Now we employ 5-fold CV to get an estimate for the test error using our selected three "best" instances of the different classifiers.
+
 
 ```{r}
 set.seed(1337)
 #randomize data
 longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
 
-#make 10 folds
-folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=10,labels=FALSE)
+#make 5 folds
+n.fold = 5
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=n.fold,labels=FALSE)
 
-cv_err.df <- data.frame(fold = 1:10, logistic_err = rep(0,10),
-                        rf_err = rep(0,10), svm_err = rep(1,10))
+cv_err.df <- data.frame(fold = 1:n.fold, logistic_err = rep(0,n.fold),
+                        rf_err = rep(0,n.fold), svm_err = rep(1,n.fold))
 
-for(i in 1:10){
+for(i in 1:n.fold){
     #get test index
     test.index <- which(folds==i,arr.ind=TRUE)
     #separate test data and train data 
@@ -607,19 +611,46 @@ for(i in 1:10){
     rf <- randomForest(Demented ~. , data = train.data, mtry = m, ntree = B) # fit random forest
     cv_err.df$rf_err[i] <- sum(predict(rf, newdata = test.data) != test.data$Demented) / N
     
-    # logistic <- # fit logistic regression model 
-    # cv_err.df$logistic_err[i] <- sum(predict(logistic, newdata = test.data) != test.data$Demented) / N
+    logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial) # fit logistic
+    cv_err.df$logistic_err[i] <- sum((predict(logistic, newdata = test.data) > .5) != test.data$Demented) / N
     
-    # svm <- # fit svm 
-    # cv_err.df$svm_err[i] <- sum(predict(svm, newdata = test.data) != test.data$Demented) / N
+    svm.model <- svm(Demented~.,data= train.data ,kernel="radial",gamma=1e-02,cost=1e+02,cross=10) # fit svm
+    cv_err.df$svm_err[i] <- sum(predict(svm.model, newdata = test.data) != test.data$Demented) / N
 }
 
 cv_err <- cv_err.df %>%
   select(-c("fold")) %>%
   colMeans()
+
+cv_err
 ```
 
+We see that the logistic regression model scores the lowest CV-error of our three models. Thus we choose the logistic model to perform model assessment on the test data. This emulates real-world efficacy as all test observations were left out of the model-selection process. 
 
+### Model assessment
+
+We now perform model assessment by classifying the observations from the test set using the logistic regression model and comparing the results to the true classifications. 
+
+```{r}
+pred.probs <- predict(longitudinal.logistic, newdata = longitudinal.test)
+predictions <- pred.probs > .5 # use 0.5 cutoff for logistic
+# generate confusion table for model on test data
+confusion <- table(predictions, longitudinal.test$Demented)
+rownames(confusion) <- c('pred 0','pred 1')
+colnames(confusion) <- c('true 0','true 1')
+# sensitivity and specificity
+sens <- confusion[2,2] / sum(confusion[,2])
+spec <- confusion[1,1] / sum(confusion[,1])
+# misclassification error
+misc <- (confusion[2,1] + confusion[1,2]) /
+  sum(confusion)
+#accuracy vector
+sens_spec_misc <- data.frame(Sensitivity = sens, Specificity = spec, Misclass_Rate = misc)
+
+confusion
+
+sens_spec_misc
+```
 
 
 ### points to discuss:
