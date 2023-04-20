@@ -20,13 +20,12 @@ abstract: "While Alzheimer's disease is traditionally diagnosed by medical profe
   disease. Longitudinal MRI data was used from a mix of nondemented and demented patients.
   This data also included several non-MRI features, such as a short objective mental
   exam, education level, and the final diagnosis of dementia, which was used as a
-  target variable for the models. The models examined were decision trees, support
+  target variable for the models. The models examined were random forest, support
   vector machines, and logistic regression. Support vector machines and decision trees
   were chosen based on applicability, and logistic regression was chosen due to its
-  relevance and consistent use in the mdeical field. The selected models trained on
+  relevance and consistent use in the medical field. The selected models were trained on
   a training subset of the data independently and then compared using cross-validation
-  on the training data. From this the optimal model was selected, which finally was
-  evaluated on the test subset of the data."
+  on the training data. From this, the optimal model was selected for the minimal misclassification error. Finally, this model was evaluated on the test data as a means to assess real world performance of the model. While we determined that the logistic model provided the best classification given a simple misclassification error loss function, our confidence in this became muddled by evidence that this result was unstable."
 ---
 
 ```{r setup, include=FALSE}
@@ -56,9 +55,14 @@ library('caret')
 ```
 
 
-## Introduction: Scope and purpose of your project
+## Introduction: Scope and Purpose
 
-The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withdstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. 
+The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. SVM's and random forests are less interpretable but provide diversity in the model set. Additionally, these provide an interesting contrast to the medical field's conventional model. 
+
+### Data Availability
+The data can be found at the following Kaggle page: https://www.kaggle.com/datasets/jboysen/mri-and-alzheimers?select=oasis_longitudinal.csv
+
+We used the oasis_longitudinal.csv dataset. 
 
 
 ## Descriptive data analysis/statistics
@@ -98,6 +102,16 @@ The source data that we accessed had a number of peculiarities that needed to be
 
 Beyond removing features, the next peculiarity is the longitudinal nature of the dataset, meaning that it includes multiple observations of the same individual at different points in time. The methods that we have learned in this course do not pertain to time-series data, so our solution was to add features, where relevant, that capture the basic properties of the time series information. MMSE, eTIV, nWBV, and ASF were use to create delta features (denoted as dMMSE, deTIV, etc) that represent the difference between the first and last observations of a particular feature for a particular patient, standardized with respect for time. For example, if a particular patient has their first MMSE recording stated as 28 and last as 22 with 300 days in between the measurements, their dMMSE is $\frac{28-22}{300} = 0.02$. This allows us to use the information conveyed by the longitudinal data while still using the methods from this course. 
 
+Finally, the dataset includes three classes of diagnosis for a patient which are constant accross their MRI visits:
+
+>Nondemented: This patient does not currently have a dementia diagnosis and will not develop one over the course of their visits. 
+
+>Demented: This patient currently has a dementia diagnosis and will maintain that diagnosis over the course of their visits.
+
+>Converted: This patient began their visits without dementia, and developed dementia over the course of their visits. 
+
+As stated before, our goal is to predict based on the features in the dataset whether a patient has dementia or not, and we included the longitudinal data by means of calculating the deltas. We saw this as incompatible with using the Converted class of patients, since across all of their visits we cannot say that they were either demented or nondemented in entirety. Therefore we removed the observations that were marked as Converted. This was not a significant loss, since there were only 14 such patients 
+
 
 
 ```{r}
@@ -135,29 +149,45 @@ pairwise_scatter_data <- baseline_with_deltas[,c("Age", "EDUC", "MMSE",
                                    "eTIV", "nWBV", "ASF" )]
 pairwise_scatter_data.deltas <-  baseline_with_deltas[,c("dMMSE",
                                    "deTIV", "dnWBV", "dASF")]
-
+# make pair plot for non-delta features
 pair_plot <- ggpairs(data=pairwise_scatter_data)
+# make pair plot for delta features
 pair_plot.deltas <- ggpairs(data=pairwise_scatter_data.deltas)
 ```
 ```{r}
 # boxplots 
 require(reshape2)
-
+# melt data for ggplot boxplot of all relevant features
 baseline_with_deltas.m <- melt(baseline_with_deltas[-1], id.var = "Demented")
-
+# make boxplot of all relevant features features
 boxplots <- 
   ggplot(data = baseline_with_deltas.m, aes(x=Demented, y=value)) + 
+  ggtitle("Feature Boxplots") +
   geom_boxplot(aes(fill=Demented)) +
   theme_minimal()
 boxplots.composite <- boxplots + facet_wrap( ~ variable, ncol=4, scales = 'free_y')
-pair_plot
 
+
+
+
+# show pair plot for non-delta features
+pair_plot
+# show pair plot for delta features
 pair_plot.deltas
 
-
+?di
 boxplots.composite
 ```
+```{r}
+summary(baseline_with_deltas)
+```
 
+```{r}
+ggplot(data=baseline_with_deltas, aes(Age, nWBV, colour = Demented)) + 
+  ggtitle("Age and Normalized Whole Brain Volume") +
+  geom_point() +
+  theme_minimal()
+```
 
 ## Methods
 We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
@@ -166,9 +196,23 @@ We consider three different classifiers, Logistic Regression, Random Forests and
 
 #### Logistic regression
 
-This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. Logistic regression fits a function for $n$ variables that outputs a probability between $0$ and $1$ for each observation. It is in this sense that logistic regression is useful for classification, since with that set of probababilities for each observation, we can implement a decision threshold in order to make the prediction bivalent. For instance, we could choose a threshold of 0.6, and the process would go like this: Our logistic model outputs a probability of 0.4 that a particular observation belongs to the target class, and then that observation gets a classification of $0$, denoting that it does not belong to the target class. The logistic model outputs a probability of 0.62 that a particular observation belongs to the target class, and then that observation gets a classification of $1$, denoting that it belongs to the target class. By tuning this threshold we can achieve different characteristics for our model, such as different sensitivities and specificities for the classification. As we lower the threshold for the classification, the sensitivity increases and specificity decreased, and similarly when we raise the threshold, the sensitivity decreases and the specificity increases. As an example, imagine that we decreased the threshold entirely to its lowest possible value, $0$. This would mean that every observation would be classified as within the target class, and it is trivially obvious that $P(A|B = 1.0)$, where $A$ stands for "the observation is classified into the target class," and $B$ stands for "the observation truly belongs to the target class.
+This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. Logistic regression fits a function for $n$ variables that outputs a probability between $0$ and $1$ for each observation. It is in this sense that logistic regression is useful for classification, since with that set of probabilities for each observation, we can implement a decision threshold in order to make the prediction bivalent. For instance, we could choose a threshold of 0.6, and the process would go like this: Our logistic model outputs a probability of 0.4 that a particular observation belongs to the target class, and then that observation gets a classification of $0$, denoting that it does not belong to the target class. The logistic model outputs a probability of 0.62 that a particular observation belongs to the target class, and then that observation gets a classification of $1$, denoting that it belongs to the target class. By tuning this threshold we can achieve different characteristics for our model, such as different sensitivities and specificities for the classification. As we lower the threshold for the classification, the sensitivity increases and specificity decreased, and similarly when we raise the threshold, the sensitivity decreases and the specificity increases. As an example, imagine that we decreased the threshold entirely to its lowest possible value, $0$. This would mean that every observation would be classified as within the target class, and it is trivially obvious that $P(A|B = 1.0)$, where $A$ stands for "the observation is classified into the target class," and $B$ stands for "the observation truly belongs to the target class.
 
-Subset selection: we choose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. This 
+Below is an outline of the overall strategy for how we fitted the logistic model:
+
+1. Select 0.5 as classification threshold.
+
+2. Perform AIC feature selection by training on entire training set. Record best feature set.
+
+3. Perform 5-fold CV with best features on training set to assess variability of sensitivity, specificity, and misclassification error. 
+
+4. Perform 5-fold CV in parallel with selected SVM and Random Forest models to select final model for testing. 
+
+Classification threshold: We chose a probability threshold of 0.5 for this logistic model (see above for explanation of significance). This is somewhat arbitrary, but we did not have the time to implement a calibration for this. In the future, we could divide our data into a training, validation, and test set, and then use the validation set to tune the probability threshold with a desired sensitivity and specificity balance in mind. 
+
+Subset selection: we chose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. AIC was then used using the $bestglm$ package in R using the entire training set. The selected features were Age, MMSE, nWBV, and dMMSE. A plot of the AIC as a function of the number of variables is included below titled "Logistic AIC Subset Selection."
+
+CV: We used cross validation mainly for getting an idea of how much the misclassification error rate, sensitivity, and specificity varied. While this was not used for model selection, it provided to us a sense of how much these measures could vary. 
 
 #### Random forests
 
@@ -245,7 +289,7 @@ graph TD
     d1[best Random Forest]
     d2[best Logistic]
     
-    e0[choose final model with CV on entire training set]
+    e0[choose final model with training set CV]
     
     b2 --> |AIC feature selection| d2
     
@@ -312,23 +356,25 @@ comparison items:
 #### Select optimal features
 ```{r}
 # use AIC to select features
-longitudinal.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
-logistic.best <- longitudinal.best.aic$BestModel
+longitudinal.logistic.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
+logistic.best <- longitudinal.logistic.best.aic$BestModel
 # get subset table as a dataframe for future use
-longitudinal.aic.subsets <- 
-  longitudinal.best.aic$Subsets %>% 
+longitudinal.logistic.aic.subsets <- 
+  longitudinal.logistic.best.aic$Subsets %>% 
   data.frame() %>% 
-  cbind(variables = 1:nrow(longitudinal.best.aic$Subsets))
+  cbind(variables = 1:nrow(longitudinal.logistic.best.aic$Subsets))
 # make feature-AIC plot
-longitudinal.aic.subsets.plot <- 
-  ggplot(longitudinal.aic.subsets, aes(x = variables, y = AIC)) +
+longitudinal.logistic.aic.subsets.plot <- 
+  ggplot(longitudinal.logistic.aic.subsets, aes(x = variables, y = AIC)) +
   geom_point(color = "red", shape = "X", size = 4) +
   geom_line(color ='darkcyan') +
-  ggtitle("Longitudinal AIC Subset Selection") +
+  ggtitle("Logistic AIC Subset Selection") +
   labs(x = "Variables", y = "AIC") +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
   theme_minimal() 
+
+longitudinal.logistic.aic.subsets.plot
 ```
 
 #### CV for evaluating the performance of fitting the logistic model, using previously calculated AIC feature set
