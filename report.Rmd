@@ -182,13 +182,38 @@ For this initial fit to decide the amount of trees we use the standard value for
 
 
 #### Support vector machines
+Support vector machines are hyperplanes which seperate the feature space and is commonly used in classification tasks. 
+The core idea is that the method finds the optimal seperating hyperplane given a set of points by solving a complex minimization task using kernel functions. The solution yields a set of support vectors...something
+The choice of a kernel function determines the shape of the hyperplane. The four most common ones are: linear, polynomial, radial and sigmoid.
+Usually, as the feature space increases data tends to become more linearly seperable. 
+So a linear kernel is a natural choice to test.
+Polynomial kernels increase rapidly in complexity as dimensions increase. 
+Also, there is the issue of which degree polynomial one wants to choose. 
+Larger degree polynomial hyperplanes quickly result in overfitting of data. 
+Thus, for the sake of simplicity we will avoid testing this kernel.
+The RBF-kernel, or the radial basis function kernel is widely used in practice 
+and often yields good results, so it would be interesting to compare with this one. 
+The Sigmoid kernel is usually good for binary classification problems, but is avoided
+in this investigation. In pre-testing, the results did not seem promising for this kernel,
+so it will be avoided here. Altough, it would be interesting to investigate it further
+in a more detailed SVM analysis.
 
-[how does it work] 
+A SVM with a linear kernel has a tuning parameter C, whilst a radial kernel has tuning parameters C and gamma.
+C is the "cost-function" and acts as a weight of how hard we penalize
+data that lies within the margin of the boundary seperating the prediction space. 
+Small C's result in large margins, but can lead to underfitting and vice versa. Gamma is closely
+related to the curvature of the seperating boundary, or how stiff we allow the boundary to be. The value of these parameters result in a bias-variance tradeoff. Thus, for the radial kernel both parameters must be tuned simultaneously.
+
+The "e1071" package in R has a svm function. 
+It can also perform k-fold CV on the data which returns an accuracy metric which we will use to tune the model parameters.
+The accuracy is a perecentage score of how many predictions were correctly classified from CV.
+
+[how does it work] v
 [strengths] 
 [weaknesses]
 [applicability for this project]
 [potential limitations]
-[how are we tuning this model]
+[how are we tuning this model] v
 
 
 ### Model Selection 
@@ -466,7 +491,91 @@ Here we see that the best value for $m$ is $m = $ `r oob.df$m[which.min(oob.df$o
 
 ### SVM
 
+```{r}
+summary(longitudinal.train)
+st.long.train <- longitudinal.train
+# Standardize/normalize all the numeric features
+st.long.train[,2:12] <- scale(st.long.train[,2:12]) 
+summary(st.long.train)
+```
+We run an initial test using the linear and radial kernel's under default parameters and test their accuracy on the training set with 10-fold CV.
+```{r}
+set.seed(58008)
+# Linear kernel
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cross=10)
+summary(lin.svm)
+# Radial kernel
+rad.svm <-svm(Demented~.,data=st.long.train,kernel="radial",cross=10)
+summary(rad.svm)
+```
+Both kernels perform decent, with accuracy > 75%. The linear kernel performs slightly better
+under deafult choice of parameters. 
 
+C is the only tuning parameter for a linear kernel, so we start there.
+Here we will perform 15 iterations testing values of C in [10^-4,10^3] (by orders of magnitude).
+For each run, we will choose the best C. 
+```{r}
+set.seed(58008)
+# Testing accuracy for different costs "C" 
+# We'll do multiple passes with k-fold CV using the training data. 
+# Range of costs, by orders of magnitude (C=10^4 results in max iteration problems)
+# Linear kernel
+C = 10^(-4:3)
+best_cost_lin = c()
+for (j in 1:15) {
+  accuracy = c()
+  for (i in 1:length(C)) {
+    lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=C[i],cross=10,scale=FALSE)
+    accuracy <- c(accuracy,lin.svm[29])
+  }
+  index <- which.max(accuracy)
+  best_cost_lin <- c(best_cost_lin,C[index])
+}
+tab <- table(best_cost_lin)
+y <- names(tab)
+x <- as.numeric(tab)
+barplot(x, names.arg = y, ylab = "Frequency", xlab = "Cost")
+``` 
+A cost of 1 seems to be most prevalent after 15 runs.
+
+For the radial kernel, we tune gamma and cost simultaneously as these parameters are correlated.
+The e1071 library has a built-in tune function which performs this analysis.
+We'll do 10 iterations, with gamma in [10^-4,10^3] and cost in [10^-4,10^3]. For each iteration, we choose the best pair.
+```{r}
+set.seed(58008)
+# 10 runs with 10-fold CV. Selecting the best combination of gamma and C
+# in each iteration.
+gammas <- c()
+costs <- c()
+for (i in 1:10) {
+  obj <- tune(svm, Demented~., data = st.long.train,ranges = list(gamma = 10^(-4:3), cost = 10^(-4:3)),tunecontrol = tune.control(cross=10))
+  GC <- summary(obj)[1]
+  best_cost <- GC[[1]]$cost
+  best_gamma <- GC[[1]]$gamma
+  gammas <- c(gammas,best_gamma)
+  costs <- c(costs,best_cost)
+}
+tab <- table(gammas,costs)
+print(tab)
+```
+From 10 runs, a value of gamma = 0.01 and cost = 100 produced the best results 6 times.
+
+With the paramteres tuned for both kernels, we test their performance against one another.
+```{r}
+set.seed(58008)
+# Linear kernel, cost = 1
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=1,cross=10)
+lin_accuracy <- lin.svm[29]
+print(lin_accuracy)
+# Radial kernel, gamma = 0.01, cost = 100
+radial.svm <- svm(Demented~.,data=st.long.train,kernel="radial",gamma=1e-02,cost=1e+02,cross=10)
+rad_accuracy <- radial.svm[29]
+print(rad_accuracy)
+```
+Both models have an accuracy of approx. 80%, with the radial kernel outperforming the linear.
+The SVM with linear kernel remains unaffected, as a cost of 1 was the default paramter we began with.
+The SVM with radial kernel has approved in accuracy by approx 5% through tuning.
+(I wouldn't say the results are conclusive in determining which model is best)
 
 ### CV each method
 
