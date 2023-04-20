@@ -128,7 +128,9 @@ under deafult choice of parameters.
 
 Now onto investigating tuning parameters.
 Beginning with tuning the cost-parameter C. C acts as a weight of how hard we penalize
-data that lies in the margin of the boundary seperating the prediction space in the model. 
+data that lies in the margin of the boundary seperating the prediction. 
+Small C's result in large margins, but can lead to underfitting. 
+Large C's result in small margins, but can lead to overfitting. 
 
 C is the only tuning parameter for a linear kernel, so we start there.
 Here we will perform 15 iterations testing values of C in [10^-4,10^3] (by orders of magnitude).
@@ -206,6 +208,7 @@ First we need to create two new training sets from the data set. One using categ
 and one using categorical variables without deltas.
 ```{r}
 # Dataframes with only deltas
+set.seed(58008)
 deltas.long <- baseline_with_deltas %>% na.omit() %>% select(c(M.F,dAge,dASF,deTIV,dMMSE,dnWBV,Demented)) 
 deltas.index <- sample(1:nrow(deltas.long), floor(.75 * nrow(deltas.long)))
 deltas.train <- deltas.long[deltas.index,]
