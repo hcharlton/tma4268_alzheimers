@@ -7,10 +7,10 @@ author:
 - Tinus Garshol
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
-  html_document:
+  pdf_document:
     toc: no
     toc_depth: '2'
-  pdf_document:
+  html_document:
     toc: no
     toc_depth: '2'
 header-includes: \usepackage{amsmath}
@@ -57,7 +57,7 @@ library('caret')
 
 ## Introduction: Scope and Purpose
 
-The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. SVM's and random forests are less interpretable but provide diversity in the model set. Additionally, these provide an interesting contrast to the medical field's conventional model. 
+The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and an objective psychological test to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal was to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. SVM's and random forests are less interpretable but provide diversity in the model set. Additionally, these provide an interesting contrast to the medical field's conventional model. 
 
 ### Data Availability
 The data can be found at the following Kaggle page: https://www.kaggle.com/datasets/jboysen/mri-and-alzheimers?select=oasis_longitudinal.csv
@@ -83,8 +83,7 @@ Hand: The patient's dominant hand. All of the patients were right-handed. This f
 
 EDUC: The education level of the patient, measured in years (including elementary school). 
 
-SES: "Socioeconomic status as assessed by the Hollingshead Index of Social Position and classified into categories from 1 (highest status) to 5 (lowest status) (Hollingshead, 1957)" 
-The socioeconomic status of the patients as classified by the Hollingshead Index. Values range from 1 (most elite status) to 5 (lowest status). This feature was thrown out since it as not consistently recorded accross the patients.  
+SES: The socioeconomic status of the patients as classified by the Hollingshead Index. Values range from 1 (most elite status) to 5 (lowest status). This feature was thrown out since it as not consistently recorded accross the patients.  
 
 MMSE: The score of the Mini Mental State Examination. Ranges from worst (0) to best (30), and represents a measure of cognitive impairment. An example of this test is attached as an appendix. We determined from this example the that score is objective, and as such is relevant to use for an analysis where the goal is to reduce pressure on medical professionals. Due to the objective nature of the exam, it could theoretically be performed by an automated system. 
 
@@ -98,11 +97,11 @@ nWBV: Normalized whole-brain volume. This feature is measured as the percent of 
 
 
 ### Data Processing
-The source data that we accessed had a number of peculiarities that needed to be resolved before we could use it. First and foremost, we noted that there were some features that were not feasible to use. These included Subject.ID, MRI.ID, Hand, and SES. Subject.ID is not useful to us as it is simply a unique identifier of the patient. This might have been useful if we were integrating this data into a larger context of data, but here it is not applicable. MRI.ID is similarly not useful since it is a unique identifier of the particular MRI scan. Following guidelines for tidy data, we are keeping each row as a unique observation (wide format) and so this is not necessary. Hand is a feature stating the dominant hand of the patient, and since all of the patients in this study were right-handed, it is not a valid feature to use as a predictor. SES denotes the socioeconomic status of the patient. This would have been an interesting feature to examine for predictive capacity, but it was not exhaustively collected like the other features and so many of the observations had this feature missing. Our two options given this were either to (1) throw out SES as a feature, or (2) remove observations that had this feature missing. Since such a large number of the observations were missing SES, we determined that it would be better to sacrifice it as a feature and preserve the size of our observation set. 
+The source data that we accessed had a number of peculiarities that needed to be resolved before we could use it. First and foremost, we noted that there were some features that were not feasible to use. These included Subject.ID, MRI.ID, Hand, and SES. Subject.ID is not useful to us as it is simply a unique identifier of the patient. This might have been useful if we were integrating this data into a larger context of data, but here it was not applicable. MRI.ID is similarly not useful since it is a unique identifier of the particular MRI scan. Following guidelines for tidy data, we are keeping each row as a unique observation (wide format) and so this is not necessary. Hand is a feature stating the dominant hand of the patient, and since all of the patients in this study were right-handed, it is not a valid feature to use as a predictor. SES denotes the socioeconomic status of the patient. This would have been an interesting feature to examine for predictive capacity, but it was not exhaustively collected like the other features and so many of the observations had this feature missing. Our two options to treat this were either to (1) throw out SES as a feature, or (2) remove observations that had this feature missing. Since such a large number of the observations were missing SES, we determined that it would be better to sacrifice it as a feature and preserve the size of our observation set. 
 
 Beyond removing features, the next peculiarity is the longitudinal nature of the dataset, meaning that it includes multiple observations of the same individual at different points in time. The methods that we have learned in this course do not pertain to time-series data, so our solution was to add features, where relevant, that capture the basic properties of the time series information. MMSE, eTIV, nWBV, and ASF were use to create delta features (denoted as dMMSE, deTIV, etc) that represent the difference between the first and last observations of a particular feature for a particular patient, standardized with respect for time. For example, if a particular patient has their first MMSE recording stated as 28 and last as 22 with 300 days in between the measurements, their dMMSE is $\frac{28-22}{300} = 0.02$. This allows us to use the information conveyed by the longitudinal data while still using the methods from this course. 
 
-Finally, the dataset includes three classes of diagnosis for a patient which are constant accross their MRI visits:
+Finally, the dataset includes three classes of diagnosis for a patient which are constant across their MRI visits:
 
 >Nondemented: This patient does not currently have a dementia diagnosis and will not develop one over the course of their visits. 
 
@@ -110,7 +109,7 @@ Finally, the dataset includes three classes of diagnosis for a patient which are
 
 >Converted: This patient began their visits without dementia, and developed dementia over the course of their visits. 
 
-As stated before, our goal is to predict based on the features in the dataset whether a patient has dementia or not, and we included the longitudinal data by means of calculating the deltas. We saw this as incompatible with using the Converted class of patients, since across all of their visits we cannot say that they were either demented or nondemented in entirety. Therefore we removed the observations that were marked as Converted. This was not a significant loss, since there were only 14 such patients 
+As stated before, our goal is to predict based on the features in the dataset whether a patient has dementia or not, and we included the longitudinal data by means of calculating the deltas. We saw this as incompatible with using the Converted class of patients, since across all of their visits we cannot say that they were either demented or nondemented in entirety. Therefore we removed the observations that were marked as Converted. This was not a significant loss, since there were only 14 such patients, leaving 136 observations to work with.
 
 
 
@@ -191,7 +190,7 @@ ggplot(data=baseline_with_deltas, aes(Age, nWBV, colour = Demented)) +
 ```
 
 ## Methods
-We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
+We consider three different classifiers, logistic regression, random forests and support vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
 
 ### Model Descriptions
 
@@ -209,15 +208,15 @@ Below is an outline of the overall strategy for how we fitted the logistic model
 
 4. Perform 5-fold CV in parallel with selected SVM and Random Forest models to select final model for testing. 
 
-Classification threshold: We chose a probability threshold of 0.5 for this logistic model (see above for explanation of significance). This is somewhat arbitrary, but we did not have the time to implement a calibration for this. In the future, we could divide our data into a training, validation, and test set, and then use the validation set to tune the probability threshold with a desired sensitivity and specificity balance in mind. 
+Classification threshold: We chose a probability threshold of 0.5 for this logistic model (see above for explanation of threshold importance). This is somewhat arbitrary, but we did not have the time to implement a calibration for this. In the future, we could divide our data into a training, validation, and test set, and then use the validation set to tune the probability threshold for a desired sensitivity and specificity balance. 
 
-Subset selection: we chose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. AIC was then used using the $bestglm$ package in R using the entire training set. We chose to use exhaustive feature selection since the time of computation is not problematic for this number of features and observations. The selected features were Age, MMSE, nWBV, and dMMSE. A plot of the AIC as a function of the number of variables is included below titled "Logistic AIC Subset Selection," showing that around 4 or 5 variables is the local minimum, which we prefer. 
+Subset selection: We chose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. AIC was then used using the $bestglm$ package in R using the entire training set. We chose to use exhaustive feature selection since the time of computation is not problematic for this number of features and observations. The selected features were Age, MMSE, nWBV, and dMMSE. A plot of the AIC as a function of the number of variables is included below titled "Logistic AIC Subset Selection," showing that around 4 or 5 variables is the local minimum, which we prefer. 
 
 CV: We used cross validation mainly for getting an idea of how much the misclassification error rate, sensitivity, and specificity varied. While this was not used for model selection, it provided to us a sense of how much these measures could vary. 
 
 #### Random forests
 
-We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
+We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an improvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
 
 This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
 
@@ -225,14 +224,14 @@ We implement Random Forests through the R package `randomForest`.
 
 Random Forests can be tuned by two parameters, the number of trees $B$ and the amount of predictors to consider for each split $m$. The number of trees used to fit a random forest does not impact the bias-variance tradeoff as long as its high enough as high $B$ does not lead to overfitting [ISLR]. Thus we may plot the cumulative OOB error estimate for a fitted Random Forest and see where an increased number of trees give no error decrease. The OOB error estimate is the aggregated misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on.
 
-For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a numer of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
+For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a number of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
 
 
 #### Support vector machines
-Support vector machines are hyperplanes which seperate the feature space and is commonly used in classification tasks. 
-The core idea is that the method finds the optimal seperating hyperplane given a set of points by solving a complex minimization task using kernel functions. The solution yields a set of support vectors...something
+Support vector machines are hyperplanes which separate the feature space and is commonly used in classification tasks. 
+The core idea is that the method finds the optimal separating hyperplane given a set of points by solving a complex minimization task using kernel functions. The solution yields a set of support vectors...something
 The choice of a kernel function determines the shape of the hyperplane. The four most common ones are: linear, polynomial, radial and sigmoid.
-Usually, as the feature space increases data tends to become more linearly seperable. 
+Usually, as the feature space increases data tends to become more linearly separable. 
 So a linear kernel is a natural choice to test.
 Polynomial kernels increase rapidly in complexity as dimensions increase. 
 Also, there is the issue of which degree polynomial one wants to choose. 
@@ -242,31 +241,25 @@ The RBF-kernel, or the radial basis function kernel is widely used in practice
 and often yields good results, so it would be interesting to compare with this one. 
 The Sigmoid kernel is usually good for binary classification problems, but is avoided
 in this investigation. In pre-testing, the results did not seem promising for this kernel,
-so it will be avoided here. Altough, it would be interesting to investigate it further
+so it will be avoided here. Although, it would be interesting to investigate it further
 in a more detailed SVM analysis.
 
 A SVM with a linear kernel has a tuning parameter C, whilst a radial kernel has tuning parameters C and gamma.
 C is the "cost-function" and acts as a weight of how hard we penalize
-data that lies within the margin of the boundary seperating the prediction space. 
+data that lies within the margin of the boundary separating the prediction space. 
 Small C's result in large margins, but can lead to underfitting and vice versa. Gamma is closely
-related to the curvature of the seperating boundary, or how stiff we allow the boundary to be. The value of these parameters result in a bias-variance tradeoff. Thus, for the radial kernel both parameters must be tuned simultaneously.
+related to the curvature of the separating boundary, or how stiff we allow the boundary to be. The value of these parameters result in a bias-variance tradeoff. Thus, for the radial kernel both parameters must be tuned simultaneously.
 
-The "e1071" package in R has a svm function. 
+The "e1071" package in R has an svm function. 
 It can also perform k-fold CV on the data which returns an accuracy metric which we will use to tune the model parameters.
-The accuracy is a perecentage score of how many predictions were correctly classified from CV.
-
-[how does it work] v
-[strengths] 
-[weaknesses]
-[applicability for this project]
-[potential limitations]
-[how are we tuning this model] v
+The accuracy is a percentage score of how many predictions were correctly classified from CV.
 
 
 ### Model Selection 
-To select a model we need to consider all possible classification methods within our selected scope that includes random forests, logistic, and SVM. Following this we then make a decision based on some measure of goodness-of-fit. For this measure we chose the misclassification rate. We primarily used this to compute a cross-validated error estimate for one model of each classification method once the "best" instance of our three classification methods had been chosen. The selection of the "best" instance of each classifier varies depending on the model type, and is discussed in the methods section of each model type. Rather than compare all model types at each step, we have chosen to only compare model instances within each classifier, only comparing the selected "best" instances of different model classifier types at the final step. This vastly reduces the size of the search space and thus decreases the computation to a reasonable level. A graphical representation of our model selection algorithm is shown below.
+To select a model we need to consider all possible classification methods within our selected scope that includes random forests, logistic, and SVM. Following this we then make a decision based on some measure of goodness-of-fit. For this measure we chose the misclassification rate. We primarily used this to compute a cross-validated error estimate for one model of each classification method once the "best" instance of our three classification methods had been chosen. The selection of the "best" instance of each classifier varies depending on the model type, and is discussed in the methods section of each model type. Rather than compare all model types at each step, we have chosen to only compare model instances within each classifier, only comparing the selected "best" instances of different model classifier types at the final step. This vastly reduces the size of the search space and thus decreases the computation time to a reasonable level. A graphical representation of our model selection algorithm is shown below.
 
 ```{r, echo=FALSE}
+
 masterplan <- 
 mermaid("
 graph TD
@@ -308,6 +301,9 @@ graph TD
     best_test[evaluate final model on test data]
     best_test --> final[interpretation]
 ")
+
+
+
 ```
 
 
@@ -320,30 +316,23 @@ Here we will provide an overview of the process we followed to arrive at a final
 
 3. Separate processed data into training and test partitions.
 
-3. Choose a small set of hyperparameters randomly for selected models, test feature selection sensitivity to this test.
+3. Tune hyperparameters and perform feature selection for each model type.
 
-4. Once feature selection is demonstrated to be insensitive to hyperparameters, proceed with feature selection and
-arbitrary hyper parameters.
+4. Select best model from SVM, random forest, and logistic with selected hyperparameters and features, as relevant.
 
-5. Tune hyperparameters (as applicable)
+5. Evaluate best model on held-out test set.
 
-6. Compare SVM, Boosting, and Logistic models by simulatentously testing with k-folded training data. 
-
-7. Select best model from the three.
-
-8. Evaluate best model on test partition. 
+6. Discuss results. 
 
 
-```{r}
-masterplan
-```
 
+!["Master Plan"](./masterplan.png){#id .class width=50% height=50%}
 
 
 
 
 ## Model evaluation 
-Once we have selected the best models of the random forest, SVM, and logistic classifiers, we used 5-fold cross validation on the training dataset to select between them. For simplicity we chose a misclassification rate as the loss function. This means that our final model choice is dictated to be the model with the lowest misclassification error rate. Since we are assessing with 5-fold CV, we chose to use the average misclassification error rate of the 5 folds. Additionally, we use sensitivity and specificity as metrics to assess the performance of our models. Below is a summary of their significance and how they were calculated. 
+Once we have selected the best models of the random forest, SVM, and logistic classifiers, we used 5-fold cross validation on the training dataset to select between them. For simplicity we chose the misclassification erro rate as the loss function. This means that our final model choice is dictated to be the model with the lowest misclassification error rate. Since we are assessing with 5-fold CV, we chose to use the average misclassification error rate of the 5 folds. Additionally, we use sensitivity and specificity as metrics to assess the performance of our models with respect to how they would be useful for real world applications. Below is a summary of their significance and how they were calculated. 
 
 Sensitivity: This represents the probability of classifying an observation as being in the target class, when it truly is in the target class. This is significant for analyzing and predicting how a model will misclassify observations in the future more specifically than just the misclassification error rate. We calculated this by dividing number of observations predicted to be in the target class by the total number of observations genuinely in the target class.
 
@@ -673,9 +662,9 @@ cv_err
 
 We see that the logistic regression model scores the lowest CV-error of our three models. However random forest scores very similarly. Additionally through pretesting the code we noticed that the result (i.e. which classifier scores lowest) from the 5-fold CV varies depends on the splits made. This may be an indication of instability in our models as a result of the small amount of observations. Due to time constraints in finalizing this project we do not discuss this in detail, though it is an important remark. 
 
-Besides the issue of CV-uncertainty, the logistic model and random forests seem to outperform SVM. For the logistic model this may be due to the feature selection done prior to fitting the model. Such a feature selection will increase the bias of the model but may decrease the variance if some of the predictors are introducing noise, ultimately leading to a better test-set performance. This seems to be the case for our logistic model. On the other hand, the accuracy of random forests may be due to the increased predictive accuracy achieved with bootstrap aggregation and decorrelation of the grown trees.
+Disregarding the issue of CV uncertainty, the logistic model and random forests seem to outperform SVM. For the logistic model this may be due to the feature selection done prior to fitting the model. Such a feature selection will increase the bias of the model but may decrease the variance if some of the predictors are introducing noise, ultimately leading to a better test-set performance. This seems to be the case for our logistic model. On the other hand, the accuracy of random forests may be due to the increased predictive accuracy achieved with bootstrap aggregation and decorrelation of the grown trees.
 
-Though we cannot confidently conclude that the logistic model outperforms random forests and SVM, we performed model assessment on the held out test set using logistic regression, keeping in mind that our model selection is uncertain. This assessment emulates real-world efficacy as all test observations were excluded from the model-selection process. 
+Though we cannot confidently conclude that the logistic model outperforms random forests and SVM, we performed model assessment on the held out test set using logistic regression, keeping in mind that our model selection is uncertain. This assessment emulates real-world efficacy as all test observations were excluded from the model selection process. 
 
 ### Model assessment
 
@@ -709,17 +698,17 @@ The results from the test data show a good predictive accuracy with a misclassif
 
 #### MMSE as a Feature
 
-We chose to include MMSE, which could be contentious. While it is objective in its evaluation, it is typically done by a medical professional. Despite this, we determined that since it is objective and simple, it is reasonable to include it. Some examples of assessment questions that it includes are "what floor are we on?", "what year is it?", and "spell the word "world" backwards." Since these questions are simple and objective enough to be run by a computerized test, it seems reasonable to use them in our project, withstanding the fact that our project aims to reduce the role of human decision making in the medical field (or at least make it easier). 
+We chose to include MMSE, which could be contentious. While it is objective in its evaluation, it is typically done by a medical professional. Despite this, we determined that since it is objective and simple, it is reasonable to include it. Some examples of assessment questions that it includes are "what floor are we on?", "what year is it?", and "spell the word 'world' backwards." Since these questions are simple and objective enough to be run by a computerized test, it seems reasonable to use them in our project, withstanding the fact that our project aims to reduce the role of human decision making in the medical field (or at least make it easier). 
 
 #### Real-World Use Case
 
-Our model selection did not include an loss function that was complicated enough to select for a particular sensitivity or specificity, but this would be desirable for our project. Ideally, our model would be used to screen out patients who definitely do not have Alzheimer's, which would result in a reduced role for medical professionals. This means that we would prioritize a high (specificity/sensitivity) as opposed to a high (sensitivity/specificity). In a future version of this project, we would search for a loss function that punished false negatives more than other errors. In this sense, we are aiming to make our test similar to the method of how HIV testing is run: 
+Our model selection did not include a loss function that was complicated enough to select for a particular sensitivity or specificity, but this would be desirable for our project. Ideally, our model would be used to screen out patients who definitely do not have Alzheimer's, which would result in a reduced role for medical professionals. This means that we would prioritize a high sensitivity as opposed to a high specificity. In a future version of this project, we would search for a loss function that punished false negatives more than other errors. In this sense, we are aiming to make our test similar to the method of how HIV testing is run: 
 
 > A blood sample from the patient is taken. First this is run through a cheap test (ELISA) that has a tremendously high sensitivity, but a low specificity. If the test is negative, no further testing is necessary and the patient is informed that they do not have HIV. If the test is positive, an expensive but accurate second "gold standard" test (western blot) is performed that has both a high sensitivity and specificity. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient.
 
-We did not achieve a model that would work for this logic of testing since our sensitivity was too low. However, supposing a future version of this model could achieve a sufficiently high sensitivity, a procedure for diagnosing Alzheimer's could follow the same logic with out statistical model replacing ELISA, and professional medical diagnosis replacing the western blot test. Thus the logic for a medical diagnosis procedure would go as follows:
+We did not achieve a model that would work for this logic of testing since our sensitivity was too low. However, supposing a future version of this model could achieve a sufficiently high sensitivity, a procedure for diagnosing Alzheimer's could follow the same logic with a statistical model replacing ELISA, and professional medical diagnosis replacing the western blot test. Thus the logic for a medical diagnosis procedure would go as follows:
 
-> An MRI and MMSE of the patient are taken. First this is run through a statistical model with high specificity. If the test is negative, no further testing is necessary and the patient is informed that they do not have dementia. If the test is positive, a medical professional will act as the second and final "gold standard" test, diagnosing the patient based on the the data and a followup visit if deemed necessary by the medical professional. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient, and treatment can occur as necessary. 
+> An MRI and MMSE of the patient are taken. First this is run through a statistical model with very high sensitivity to the target. If the test is negative, no further testing is necessary and the patient is informed that they do not have dementia. If the test is positive, a medical professional will act as the second and final "gold standard" test, diagnosing the patient based on the the data and a followup visit if deemed necessary by the medical professional. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient, and treatment can occur as necessary. 
 
 
 ## Summary
