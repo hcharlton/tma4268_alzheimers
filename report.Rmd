@@ -219,7 +219,7 @@ The accuracy is a perecentage score of how many predictions were correctly class
 
 
 ### Model Selection 
-To select a model we need to consider all possible models and make a decision based on some measure of goodness-of-fit. For this measure we use the misclassification rate to compute a cross-validated error estimate for one model of each classifier. To select one model for of each classifier for comparison, we use different methods for each classifier. A graphical representation of our model selection algorithm is shown below. We have chosen to initially only compare models of the same classifier as this seperates the search space and reduces the amount of computations considerably.
+To select a model we need to consider all possible classification methods within our selected scope that includes random forests, logistic, and SVM. Following this we then make a decision based on some measure of goodness-of-fit. For this measure we chose the misclassification rate. We primarily used this to compute a cross-validated error estimate for one model of each classification method once the "best" instance of our three classification methods had been chosen. The selection of the "best" instance of each classifier varies depending on the model type, and is discussed in the methods section of each model type. Rather than compare all model types at each step, we have chosen to only compare model instances within each classifier, only comparing the selected "best" instances of different model classifier types at the final step. This vastly reduces the size of the search space and thus decreases the computation to a reasonable level. A graphical representation of our model selection algorithm is shown below.
 
 ```{r, echo=FALSE}
 masterplan <- 
@@ -238,23 +238,19 @@ graph TD
     a0[training data]
     a1[test data]
     b0[SVM]
-    b1[Boosting]
+    b1[Random Forest]
     b2[Logistic]
-    c0[subsetted SVM]
-    c1[subsetted Boosting]
     
     d0[best SVM]
-    d1[best Boosting]
+    d1[best Random Forest]
     d2[best Logistic]
     
-    e0[choose best of best models with CV]
+    e0[choose final model with CV on entire training set]
     
-    b0 --> |feat param sensitivity| c0
-    b1 --> |feat param sensitivity| c1
-    b2 --> |feature selection| d2
+    b2 --> |AIC feature selection| d2
     
-    c0 --> |parameter tuning| d0
-    c1 --> |parameter tuning| d1
+    b0 --> |parameter tuning| d0
+    b1 --> |parameter tuning| d1
     
 
 
@@ -264,7 +260,7 @@ graph TD
     d1 --> e0
     d2 --> e0
     e0 --> best_test
-    best_test[evaluate finaln model on test data]
+    best_test[evaluate final model on test data]
     best_test --> final[interpretation]
 ")
 ```
@@ -302,8 +298,7 @@ masterplan
 
 
 ## Model evaluation 
-[what's our loss function]
-[how do we propose to compare the best models, once we have them]
+Once we have selected the best models of the random forest, SVM, and logistic classifiers, we used 5-fold cross validation on the training dataset to select between them. For simplicity we chose a misclassification rate as the loss function. This means that our final model choice is dictated to be the model with the lowest misclassification error rate. Since we are assessing with 5-fold CV, we chose to use the average misclassification error rate of the 5 folds. 
 
 ## Results and interpretation
 comparison items: 
@@ -653,19 +648,22 @@ sens_spec_misc
 ```
 
 
-### points to discuss:
 
-whether to include MMSE: Seems like it is objective, and only takes a few minutes to run. It could theoretically be run by existing NLP structures, so we could make an argument that using this does not compromise our goal of eliminating pressure on medical professionals. 
+### Caveats
 
-whether having an high specificity or sensitivity is more important: what is worse: (1) someone who truly does not have alzheimer's being told they do, or (2) someone who truly does have alzheimer's being told they don't? If (1): 
+#### MMSE as a Feature
 
+We chose to include MMSE, which could be contentious. While it is objective in its evaluation, it is typically done by a medical professional. Despite this, we determined that since it is objective and simple, it is reasonable to include it. Some examples of assessment questions that it includes are "what floor are we on?", "what year is it?", and "spell the word "world" backwards." Since these questions are simple and objective enough to be run by a computerized test, it seems reasonable to use them in our project, withstanding the fact that our project aims to reduce the role of human decision making in the medical field (or at least make it easier). 
 
-overall strategy like Kasper drew:
-treat the entire process as model selection. separate test and training data. Set aside test data until we choose a final best model based on the training data.  train models on training data, setting an arbitrary set of parameters -> perform a rough sensitivity analysis for the effect of parameters on the feature selection -> choose arbitrary parameters -> perform feature selection, choosing best set of features -> tune parameters for the model with best feature set -> evaluate all three models with k-fold cv in parallel -> select best model -> 
+#### Real-World Use Case
 
-why choose first visit as baseline instead of some other one or an average?
-why only consider the change between the first and last? ]
-consider adding a feature for fluctuation in other features (ie how much does eTIV fluctuate, regardless of direction)
+Our model selection did not include an loss function that was complicated enough to select for a particular sensitivity or specificity, but this would be desirable for our project. Ideally, our model would be used to screen out patients who definitely do not have Alzheimer's, which would result in a reduced role for medical professionals. This means that we would prioritize a high (specificity/sensitivity) as opposed to a high (sensitivity/specificity). In a future version of this project, we would search for a loss function that punished false negatives more than other errors. In this sense, we are aiming to make our test similar to the method of how HIV testing is run: 
+
+> A blood sample from the patient is taken. First this is run through a cheap test (ELISA) that has a tremendously high sensitivity, but a low specificity. If the test is negative, no further testing is necessary and the patient is informed that they do not have HIV. If the test is positive, an expensive but accurate second "gold standard" test (western blot) is performed that has both a high sensitivity and specificity. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient.
+
+We did not achieve a model that would work for this logic of testing since our sensitivity was too low. However, supposing a future version of this model could achieve a sufficiently high sensitivity, a procedure for diagnosing Alzheimer's could follow the same logic with out statistical model replacing ELISA, and professional medical diagnosis replacing the western blot test. Thus the logic for a medical diagnosis procedure would go as follows:
+
+> An MRI and MMSE of the patient are taken. First this is run through a statistical model with high specificity. If the test is negative, no further testing is necessary and the patient is informed that they do not have dementia. If the test is positive, a medical professional will act as the second and final "gold standard" test, diagnosing the patient based on the the data and a followup visit if deemed necessary by the medical professional. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient, and treatment can occur as necessary. 
 
 
 ## Summary
