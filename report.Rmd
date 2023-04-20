@@ -1,54 +1,107 @@
 ---
-title: "Compulsory Exercise 2: Prediction of Alzheimers Disease from Longitudinal MRI Data"
+title: 'Compulsory Exercise 2: Prediction of Alzheimers Disease from Longitudinal
+  MRI Data'
 author:
 - Chester Henry Charlton
 - Kasper Eikeland
 - Tinus Garshol
 date: "`r format(Sys.time(), '%d %B, %Y')`"
-header-includes: \usepackage{amsmath}
 output:
   html_document:
-  #   toc: no
-  #   toc_depth: '2'
-  #   df_print: paged
-  #pdf_document:
     toc: no
     toc_depth: '2'
+  pdf_document:
+    toc: no
+    toc_depth: '2'
+header-includes: \usepackage{amsmath}
 urlcolor: blue
-abstract: "This is the place for your abstract (max 350 words)"
+abstract: "While Alzheimer's disease is traditionally diagnosed by medical professionals,
+  in this report we detail the use of statistical learning models to classify Alzheimer's
+  disease. Longitudinal MRI data was used from a mix of nondemented and demented patients.
+  This data also included several non-MRI features, such as a short objective mental
+  exam, education level, and the final diagnosis of dementia, which was used as a
+  target variable for the models. The models examined were decision trees, support
+  vector machines, and logistic regression. Support vector machines and decision trees
+  were chosen based on applicability, and logistic regression was chosen due to its
+  relevance and consistent use in the mdeical field. The selected models trained on
+  a training subset of the data independently and then compared using cross-validation
+  on the training data. From this the optimal model was selected, which finally was
+  evaluated on the test subset of the data."
 ---
-  
+
 ```{r setup, include=FALSE}
 library("knitr")
-knitr::opts_chunk$set(echo = TRUE,tidy=TRUE,message=FALSE,warning=FALSE,strip.white=TRUE,prompt=FALSE, 
-                      cache=TRUE, size="scriptsize",fig.width=4, fig.height=3,fig.align = "center")
+knitr::opts_chunk$set(echo=TRUE, eval=TRUE, message=FALSE, warning = FALSE, 
+                      strip.white = TRUE, prompt = FALSE, cache = TRUE, 
+                      size = "scriptsize", fig.width = 6, fig.height = 4,
+                      fig.align = "center")
 
 ```
 
 ```{r,eval=TRUE,echo=FALSE}
+library("randomForest")
 library("rmarkdown")
 library("dplyr")
 library("GGally")
 library("tidyr")
 library("formatR")
+library('DiagrammeR')
+library('bestglm')
+library("pROC") 
+library("cvAUC")
+library('webshot')
+library('boot')
+library('e1071')
+library('caret')
 ```
 
-```{r}
-#setwd("/Users/chcharlton/NTNU/statLearning/compulsory_alzheimers")
-#setwd("/Users/kaspe/Documents/NTNU/23V/TMA4268_Statistical_Learning/Projects/tma4268_alzheimers")
-setwd("C:/Users/tinus/OneDrive/Desktop/GitHub/tma4268_alzheimers")
-```
 
-Data pre-processing
+## Introduction: Scope and purpose of your project
+
+The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withdstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. 
+
+
+## Descriptive data analysis/statistics
+
+### Description of Features:
+
+MRI.ID: The unique identifier of an MRI scan. This feature was not used. 
+
+Group: The group that the patient was classified in the across the various scans. Possible values are "Undemented," denoting a patient without symptoms of dementia throughout all scans, "Demented" denoting a patient with symptoms of dementia across all scans, or "Converted," denoting someone who began without symptoms of dementia but developed them at a further scan. We chose to throw away "Converted," since our primary goal is to develop a classification model for patients who either have dementia or not, and the Converted class complicates this since patients in this class would fall into different categories at different times. 
+
+Visit: The order of the visit in which the scan was done, indexed from 1. This data was not used for our model, but was used for processing the data. 
+
+MR Delay: The number of days since the previous scan. Marked as 0 for the initial scan. Similarly, this data was not used for the model directly, but helped us for data processing as will be described later. 
+
+M.F: Categorical variable for male or female patients at birth. M denotes male, F denotes female. This binary variable was included in the models, however feature selection points to it not being a decisive feature for classification. 
+
+Hand: The patient's dominant hand. All of the patients were right-handed. This feature was thrown out. 
+
+EDUC: The education level of the patient, measured in years (including elementary school). 
+
+SES: "Socioeconomic status as assessed by the Hollingshead Index of Social Position and classified into categories from 1 (highest status) to 5 (lowest status) (Hollingshead, 1957)" 
+The socioeconomic status of the patients as classified by the Hollingshead Index. Values range from 1 (most elite status) to 5 (lowest status). This feature was thrown out since it as not consistently recorded accross the patients.  
+
+MMSE: The score of the Mini Mental State Examination. Ranges from worst (0) to best (30), and represents a measure of cognitive impairment. An example of this test is attached as an appendix. We determined from this example the that score is objective, and as such is relevant to use for an analysis where the goal is to reduce pressure on medical professionals. Due to the objective nature of the exam, it could theoretically be performed by an automated system. 
+
+CDR: The patient's clinical dementia rating, as assessed by a medical professional. Ranges from 0 to 3, with any score above 0 representing a form of dementia. This is our target feature for classification, which we transformed into a binary variable. 
+
+ASF: The atlas scaling factor of the patient. A measure standardizing the intra-cranial volume. 
+
+eTIV: Estimated total intracranial volume. 
+
+nWBV: Normalized whole-brain volume. This feature is measured as the percent of the possible total volume that is detected as grey or white matter. 
+
+
+### Data Processing
+The source data that we accessed had a number of peculiarities that needed to be resolved before we could use it. First and foremost, we noted that there were some features that were not feasible to use. These included Subject.ID, MRI.ID, Hand, and SES. Subject.ID is not useful to us as it is simply a unique identifier of the patient. This might have been useful if we were integrating this data into a larger context of data, but here it is not applicable. MRI.ID is similarly not useful since it is a unique identifier of the particular MRI scan. Following guidelines for tidy data, we are keeping each row as a unique observation (wide format) and so this is not necessary. Hand is a feature stating the dominant hand of the patient, and since all of the patients in this study were right-handed, it is not a valid feature to use as a predictor. SES denotes the socioeconomic status of the patient. This would have been an interesting feature to examine for predictive capacity, but it was not exhaustively collected like the other features and so many of the observations had this feature missing. Our two options given this were either to (1) throw out SES as a feature, or (2) remove observations that had this feature missing. Since such a large number of the observations were missing SES, we determined that it would be better to sacrifice it as a feature and preserve the size of our observation set. 
+
+Beyond removing features, the next peculiarity is the longitudinal nature of the dataset, meaning that it includes multiple observations of the same individual at different points in time. The methods that we have learned in this course do not pertain to time-series data, so our solution was to add features, where relevant, that capture the basic properties of the time series information. MMSE, eTIV, nWBV, and ASF were use to create delta features (denoted as dMMSE, deTIV, etc) that represent the difference between the first and last observations of a particular feature for a particular patient, standardized with respect for time. For example, if a particular patient has their first MMSE recording stated as 28 and last as 22 with 300 days in between the measurements, their dMMSE is $\frac{28-22}{300} = 0.02$. This allows us to use the information conveyed by the longitudinal data while still using the methods from this course. 
+
+
+
 ```{r}
-cross_sectional.df <- read.csv("oasis_cross-sectional.csv")
 # Patient is demented if CDR is > 0
-cs.mutated <- cross_sectional.df %>%
-  dplyr::select(c(M.F, eTIV, MMSE, nWBV, ASF, Age, CDR)) %>%
-  na.omit() %>%
-  mutate(Demented = as.factor(CDR>0),
-         M.F = as.factor(M.F)) %>%
-  dplyr::select(c(M.F, eTIV, MMSE, nWBV, ASF, Age, Demented))
 longitudinal.df <- read.csv("oasis_longitudinal.csv")
 longitudinal_deltas <- longitudinal.df %>% 
   group_by(Subject.ID) %>%
@@ -56,46 +109,332 @@ longitudinal_deltas <- longitudinal.df %>%
             deTIV = (last(eTIV) - first(eTIV)) / last(Visit),
             dnWBV = (last(nWBV) - first(nWBV)) / last(Visit),
             dASF = (last(ASF) - first(ASF)) / last(Visit),
-            dAge = (last(Age) - first(Age)) / last(Visit))
+            dAge = (last(Age) - first(Age)) / last(Visit)) %>% 
+  na.omit()
+  
 baseline_with_deltas <- longitudinal.df %>%
   filter(Visit == 1) %>%
   left_join(longitudinal_deltas, by = c("Subject.ID")) %>%
   mutate(Demented = as.factor(Group != "Nondemented"), # Those who converted became demented
          M.F = as.factor(M.F)) %>% 
-  dplyr::select(-c(Subject.ID, MRI.ID, Group, Visit, MR.Delay, Hand, CDR, SES)) 
-  
+  dplyr::select(-c(Subject.ID, MRI.ID, Group, Visit, MR.Delay, Hand, CDR, SES))
+
+
 set.seed(1337)
 # Longitudinal data
-l.train.indeces <- sample(1:nrow(baseline_with_deltas), floor(.75 * nrow(baseline_with_deltas)))
-longitudinal.train <- na.omit(baseline_with_deltas[l.train.indeces,])
-longitudinal.test <- na.omit(baseline_with_deltas[-l.train.indeces,])
-# Cross-sectional
-cs.train.indeces <- sample(1:nrow(cs.mutated), floor(.75 * nrow(cs.mutated)))
-cs.train <- na.omit(cs.mutated[cs.train.indeces,])
-cs.test <- na.omit(cs.mutated[-cs.train.indeces,])
+l.train.indices <- sample(1:nrow(baseline_with_deltas), floor(.75 * nrow(baseline_with_deltas)))
+longitudinal.train <- na.omit(baseline_with_deltas[l.train.indices,])
+longitudinal.test <- na.omit(baseline_with_deltas[-l.train.indices,])
 ```
+
+### EDA: 
+
+```{r}
+# select some quantitative data and plot the pairs of it
+pairwise_scatter_data <- baseline_with_deltas[,c("Age", "EDUC", "MMSE",
+                                   "eTIV", "nWBV", "ASF" )]
+pairwise_scatter_data.deltas <-  baseline_with_deltas[,c("dMMSE",
+                                   "deTIV", "dnWBV", "dASF")]
+
+pair_plot <- ggpairs(data=pairwise_scatter_data)
+pair_plot.deltas <- ggpairs(data=pairwise_scatter_data.deltas)
+```
+```{r}
+# boxplots 
+require(reshape2)
+
+baseline_with_deltas.m <- melt(baseline_with_deltas[-1], id.var = "Demented")
+
+boxplots <- 
+  ggplot(data = baseline_with_deltas.m, aes(x=Demented, y=value)) + 
+  geom_boxplot(aes(fill=Demented)) +
+  theme_minimal()
+boxplots.composite <- boxplots + facet_wrap( ~ variable, ncol=4, scales = 'free_y')
+pair_plot
+
+pair_plot.deltas
+
+
+boxplots.composite
+```
+
+
+## Methods
+We consider three different classifiers, Logistic Regression, Random Forests and Support Vector machines. We first introduce and describe the classifiers, then describe the methods used for performance evaluation and model selection. 
+
+### Model Descriptions
+
+#### Logistic regression
+
+This method was chosen as a candidate due to its continued use in the medical field and value as a method to give classification probabilities. This is especially useful in our case since we have a binary target variable (demented or nondemented) and a combination of binary and nonbinary predictors. Logistic regression fits a function for $n$ variables that outputs a probability between $0$ and $1$ for each observation. It is in this sense that logistic regression is useful for classification, since with that set of probababilities for each observation, we can implement a decision threshold in order to make the prediction bivalent. For instance, we could choose a threshold of 0.6, and the process would go like this: Our logistic model outputs a probability of 0.4 that a particular observation belongs to the target class, and then that observation gets a classification of $0$, denoting that it does not belong to the target class. The logistic model outputs a probability of 0.62 that a particular observation belongs to the target class, and then that observation gets a classification of $1$, denoting that it belongs to the target class. By tuning this threshold we can achieve different characteristics for our model, such as different sensitivities and specificities for the classification. As we lower the threshold for the classification, the sensitivity increases and specificity decreased, and similarly when we raise the threshold, the sensitivity decreases and the specificity increases. As an example, imagine that we decreased the threshold entirely to its lowest possible value, $0$. This would mean that every observation would be classified as within the target class, and it is trivially obvious that $P(A|B = 1.0)$, where $A$ stands for "the observation is classified into the target class," and $B$ stands for "the observation truly belongs to the target class.
+
+Subset selection: we choose to use the Aikake Information Criterion. The possibilities we could have chosen for this were Cp, BIC, AIC, and Adjusted R^2. Cp and Adjusted R^2 are not appropriate since they rely on RSS, which is not compatible with a logistic function, and after this we arbitrarily chose AIC instead of BIC, which based on our knowledge will not be significant. This 
+
+#### Random forests
+
+We use Random Forests as a classifier as described in [ISLR2]. Random Forests is a tree ensemble method that can be used for both regression and classification. Each tree is trained on a bootstrap sample of the training data. The splits are made using a random subset of $m<p$ predictors. This decorrelates the trees and presents an imporvement over bagging thereof [cite ISLR]. For each tree we perform a classification on the Out-Of-Bag (OOB) observations, the training observations not in the bootstrap sample the given tree was trained on. In this sense, each tree votes for a given class for each OOB observation. We then aggregate all votes and the forest predicts the class for each observation in the training data as the one which got the majority of the votes. 
+
+This method of growing decision trees and making predictions offers for higher predictive accuracy at the cost of lower interpretability compared to standard classification trees. For our purposes we value the predictive accuracy higher. However, a case can be made for more interpretability as such a decision tree could in theory be used as an easy-to-follow clinical test for deciding whether or not a patient has AD based on similar data. Still, if the predictive accuracy of such a test is not high enough, its value as a clinical test is lowered.
+
+We implement Random Forests through the R package `randomForest`.
+
+Random Forests can be tuned by two parameters, the number of trees $B$ and the amount of predictors to consider for each split $m$. The number of trees used to fit a random forest does not impact the bias-variance tradeoff as long as its high enough as high $B$ does not lead to overfitting [ISLR]. Thus we may plot the cumulative OOB error estimate for a fitted Random Forest and see where an increased number of trees give no error decrease. The OOB error estimate is the aggregated misclassification rate calculated on the training observations not in the bootstrap sample the tree was trained on.
+
+For this initial fit to decide the amount of trees we use the standard value for $m$ in classification, $m=\sqrt{p}$. After choosing a numer of trees, we may compare the OOB error estimate for different values of $m$ and choose the model with lowest OOB error estimate. 
+
+
+#### Support vector machines
+Support vector machines are hyperplanes which seperate the feature space and is commonly used in classification tasks. 
+The core idea is that the method finds the optimal seperating hyperplane given a set of points by solving a complex minimization task using kernel functions. The solution yields a set of support vectors...something
+The choice of a kernel function determines the shape of the hyperplane. The four most common ones are: linear, polynomial, radial and sigmoid.
+Usually, as the feature space increases data tends to become more linearly seperable. 
+So a linear kernel is a natural choice to test.
+Polynomial kernels increase rapidly in complexity as dimensions increase. 
+Also, there is the issue of which degree polynomial one wants to choose. 
+Larger degree polynomial hyperplanes quickly result in overfitting of data. 
+Thus, for the sake of simplicity we will avoid testing this kernel.
+The RBF-kernel, or the radial basis function kernel is widely used in practice 
+and often yields good results, so it would be interesting to compare with this one. 
+The Sigmoid kernel is usually good for binary classification problems, but is avoided
+in this investigation. In pre-testing, the results did not seem promising for this kernel,
+so it will be avoided here. Altough, it would be interesting to investigate it further
+in a more detailed SVM analysis.
+
+A SVM with a linear kernel has a tuning parameter C, whilst a radial kernel has tuning parameters C and gamma.
+C is the "cost-function" and acts as a weight of how hard we penalize
+data that lies within the margin of the boundary seperating the prediction space. 
+Small C's result in large margins, but can lead to underfitting and vice versa. Gamma is closely
+related to the curvature of the seperating boundary, or how stiff we allow the boundary to be. The value of these parameters result in a bias-variance tradeoff. Thus, for the radial kernel both parameters must be tuned simultaneously.
+
+The "e1071" package in R has a svm function. 
+It can also perform k-fold CV on the data which returns an accuracy metric which we will use to tune the model parameters.
+The accuracy is a perecentage score of how many predictions were correctly classified from CV.
+
+[how does it work] v
+[strengths] 
+[weaknesses]
+[applicability for this project]
+[potential limitations]
+[how are we tuning this model] v
+
+
+### Model Selection 
+To select a model we need to consider all possible classification methods within our selected scope that includes random forests, logistic, and SVM. Following this we then make a decision based on some measure of goodness-of-fit. For this measure we chose the misclassification rate. We primarily used this to compute a cross-validated error estimate for one model of each classification method once the "best" instance of our three classification methods had been chosen. The selection of the "best" instance of each classifier varies depending on the model type, and is discussed in the methods section of each model type. Rather than compare all model types at each step, we have chosen to only compare model instances within each classifier, only comparing the selected "best" instances of different model classifier types at the final step. This vastly reduces the size of the search space and thus decreases the computation to a reasonable level. A graphical representation of our model selection algorithm is shown below.
+
+```{r, echo=FALSE}
+masterplan <- 
+mermaid("
+graph TD
+    start[source data]
+    process[processed data]
+    start --> process[processed data]
+    process --> a0
+    process --> a1
+
+
+    a0 -->  b0 
+    a0 -->  b1 
+    a0 -->  b2
+    a0[training data]
+    a1[test data]
+    b0[SVM]
+    b1[Random Forest]
+    b2[Logistic]
+    
+    d0[best SVM]
+    d1[best Random Forest]
+    d2[best Logistic]
+    
+    e0[choose final model with CV on entire training set]
+    
+    b2 --> |AIC feature selection| d2
+    
+    b0 --> |parameter tuning| d0
+    b1 --> |parameter tuning| d1
+    
+
+
+
+    a1 --> best_test
+    d0 --> e0
+    d1 --> e0
+    d2 --> e0
+    e0 --> best_test
+    best_test[evaluate final model on test data]
+    best_test --> final[interpretation]
+")
+```
+
+
+
+Here we will provide an overview of the process we followed to arrive at a final model. 
+
+1. Collect the source data. 
+
+2. Process data: select relevant features, add deltas, remove time series data.  
+
+3. Separate processed data into training and test partitions.
+
+3. Choose a small set of hyperparameters randomly for selected models, test feature selection sensitivity to this test.
+
+4. Once feature selection is demonstrated to be insensitive to hyperparameters, proceed with feature selection and
+arbitrary hyper parameters.
+
+5. Tune hyperparameters (as applicable)
+
+6. Compare SVM, Boosting, and Logistic models by simulatentously testing with k-folded training data. 
+
+7. Select best model from the three.
+
+8. Evaluate best model on test partition. 
+
+
+
+Here we will provide an overview of the process we followed to arrive at a final model. 
+
+1. Collect the source data. 
+
+2. Process data: select relevant features, add deltas, remove time series data.  
+
+3. Separate processed data into training and test partitions.
+
+3. Choose a small set of hyperparameters randomly for selected models, test feature selection sensitivity to this test.
+
+4. Once feature selection is demonstrated to be insensitive to hyperparameters, proceed with feature selection and
+arbitrary hyper parameters.
+
+5. Tune hyperparameters (as applicable)
+
+6. Compare SVM, Boosting, and Logistic models by simulatentously testing with k-folded training data. 
+
+7. Select best model from the three.
+
+8. Evaluate best model on test partition. 
 
 # SVM
 ```{r}
-# Necessary packages
-library("e1071")
-library("caret")
+masterplan
 ```
 Support vector machines creates hyperplanes to seperate the feature space and is commonly used in classification tasks. 
 The core idea is that the method finds the "best" seperating hyperplane given a set of points,
 usually by solving a complex minimization task using kernel functions. 
 The math involved is beyond the scope of this project. 
 
-The "e1071" package in R has a built-in svm function. 
-It can also perform k-fold CV on the data which returns an accuracy metric - perecentage of predictions it got right given a set of data.
-When using SVM's, the first step is to standardize data, which usually yields better performance when fitting models (common practice).
-(might be that the svm function does this internally)
+
+
+
+
+## Model evaluation 
+Once we have selected the best models of the random forest, SVM, and logistic classifiers, we used 5-fold cross validation on the training dataset to select between them. For simplicity we chose a misclassification rate as the loss function. This means that our final model choice is dictated to be the model with the lowest misclassification error rate. Since we are assessing with 5-fold CV, we chose to use the average misclassification error rate of the 5 folds. 
+
+## Results and interpretation
+comparison items: 
+[model size] 
+[flexibility] 
+[bias-variance trade-off]
+
+
+### Logistic regression
+
+#### Select optimal features
 ```{r}
-summary(longitudinal.train)
-st.long.train <- longitudinal.train
-# Standardize/normalize all the numeric features
-st.long.train[,2:12] <- scale(st.long.train[,2:12]) 
-summary(st.long.train)
+# use AIC to select features
+longitudinal.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
+logistic.best <- longitudinal.best.aic$BestModel
+# get subset table as a dataframe for future use
+longitudinal.aic.subsets <- 
+  longitudinal.best.aic$Subsets %>% 
+  data.frame() %>% 
+  cbind(variables = 1:nrow(longitudinal.best.aic$Subsets))
+# make feature-AIC plot
+longitudinal.aic.subsets.plot <- 
+  ggplot(longitudinal.aic.subsets, aes(x = variables, y = AIC)) +
+  geom_point(color = "red", shape = "X", size = 4) +
+  geom_line(color ='darkcyan') +
+  ggtitle("Longitudinal AIC Subset Selection") +
+  labs(x = "Variables", y = "AIC") +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  theme_minimal() 
+```
+
+#### CV for evaluating the performance of fitting the logistic model, using previously calculated AIC feature set
+
+```{r}
+set.seed(1337)
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
+
+#make n folds
+n <- 5
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=n,labels=FALSE)
+
+#vector to store sensititivities
+sens.vec <- c()
+#specificities
+spec.vec <- c()
+#misclassivication errors
+misc.vec <- c()
+# cumulative confusion matrix
+logistic.confusion.cumulative <- matrix(data = c(0,0,0,0), nrow=2,ncol=2)
+
+
+for(i in 1:n){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    #train best logistic model for training partition
+    logistic.i <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial)
+    #generated predicted probabilities on test partition 
+    logistic.i.probs <- predict(logistic.i, newdata = test.data, type = "response")
+    #convert probabilities to classification based on a P = 0.5 decision threshold
+    logistic.i.pred <- ifelse(logistic.i.probs > 0.5, 1, 0)
+    # generate confusion table for predictions
+    logistic.i.confusion <- table(logistic.i.pred, test.data$Demented)
+    rownames(logistic.i.confusion) <- c('pred 0','pred 1')
+    colnames(logistic.i.confusion) <- c('true 0','true 1')
+    # calculate sensitivity and specificity
+    logistic.sens <- logistic.i.confusion[2,2] / sum(logistic.i.confusion[,2])
+    logistic.spec <- logistic.i.confusion[1,1] / sum(logistic.i.confusion[,1])
+    logistic.misc <- (logistic.i.confusion[2,1] + logistic.i.confusion[1,2]) / sum(logistic.i.confusion)
+    #append accuracy metrics to persistent vectors
+    sens.vec <- c(sens.vec,logistic.sens)
+    spec.vec <- c(spec.vec,logistic.spec)
+    misc.vec <- c(misc.vec, logistic.misc)
+    #add confusion matrix to persistent object
+    logistic.confusion.cumulative <- logistic.i.confusion + logistic.confusion.cumulative
+}
+# compute cumulative sensitivity, specificity and misclassification error accross the folds
+sens.cumulative <- logistic.confusion.cumulative[2,2] / sum(logistic.confusion.cumulative[,2])
+spec.cumulative <- logistic.confusion.cumulative[1,1] / sum(logistic.confusion.cumulative[,1])
+misc.cumulative <- (logistic.confusion.cumulative[2,1] + logistic.confusion.cumulative[1,2]) /
+  sum(logistic.confusion.cumulative)
+
+
+sens_spec_misc <- c(sens.cumulative, spec.cumulative, misc.cumulative)
+sens.vec
+spec.vec
+```
+
+```{r}
+# visualize some things
+sens_spec_misc.df <- data.frame(sens = sens.vec, spec = spec.vec, misc = misc.vec)
+
+logistic.accuracy.plot <- 
+  ggplot(sens_spec_misc.df, aes(x = spec, y = sens))+
+  geom_point(aes(size = misc)) + 
+  labs(size = "Misclassification") +
+  scale_x_reverse() +
+  ggtitle("K-Fold Accuracy Distribution")+
+  labs(x = "Specificity", y = "Sensitivity") +
+  theme_minimal() 
+
+
+logistic.accuracy.plot
+logistic.confusion.cumulative
+sens_spec_misc
 ```
 The second step is to make a choice of kernel function. 
 The svm-function has four options of kernels: Linear, Polynomial, Radial and Sigmoid.
@@ -112,19 +451,36 @@ in this investigation. In pre-testing, the results did not seem promising for th
 so it will be avoided here. Altough, it would be interesting to investigate it further
 in a more detailed SVM analysis.
 
-We run an initial test using the linear and radial kernel's under default parameters and test their accuracy on the training set with 10-fold CV.
-```{r}
-set.seed(58008)
-# Linear kernel
-lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cross=10)
-summary(lin.svm)
 
-# Radial kernel
-rad.svm <-svm(Demented~.,data=st.long.train,kernel="radial",cross=10)
-summary(rad.svm)
+
+#### Train final model
+```{r}
+# train logistic model on entire training set
+longitudinal.logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = longitudinal.train, family = binomial)
+# extract training probabilities
+longitudinal.logistic.train.probs <- longitudinal.logistic$fitted.values
+# extract training classifications
+longitudinal.logistic.train.preds <- ifelse(longitudinal.logistic.train.probs > 0.5, 1, 0)
+# generate confusion table for model on training data
+longitudinal.logistic.confusion <- table(longitudinal.logistic.train.preds, longitudinal.train$Demented)
+rownames(longitudinal.logistic.confusion) <- c('pred 0','pred 1')
+colnames(longitudinal.logistic.confusion) <- c('true 0','true 1')
+# sensitivity and specificity
+longitudinal.logistic.sens <- longitudinal.logistic.confusion[2,2] / sum(longitudinal.logistic.confusion[,2])
+longitudinal.logistic.spec <- longitudinal.logistic.confusion[1,1] / sum(longitudinal.logistic.confusion[,1])
+# misclassification error
+longitudinal.logistic.misc <- (longitudinal.logistic.confusion[2,1] + longitudinal.logistic.confusion[1,2]) /
+  sum(longitudinal.logistic.confusion)
+#accuracy vector
+sens_spec_misc <- c(longitudinal.logistic.sens, longitudinal.logistic.spec, longitudinal.logistic.misc)
+sens_spec_misc
 ```
-Both kernels perform decent, with accuracy > 75%. The linear kernel performs slightly better
-under deafult choice of parameters. 
+
+
+
+### Random forest
+
+We proceed by fitting a Random Forest to the training set and tune the parameters to find the "best" instance of a Random Forest classifier. First we consider the number of trees in the forest, $B$. We fit a random forest and plot the cumulative OOB error. 
 
 Now onto investigating tuning parameters.
 Beginning with tuning the cost-parameter C. C acts as a weight of how hard we penalize
@@ -136,11 +492,84 @@ C is the only tuning parameter for a linear kernel, so we start there.
 Here we will perform 15 iterations testing values of C in [10^-4,10^3] (by orders of magnitude).
 For each run, we will choose the best C. 
 ```{r}
+set.seed(1337)
+
+p <- ncol(longitudinal.train) - 1 # number of predictors
+N <- nrow(longitudinal.train) # number of training observations
+
+
+trainx <- select(longitudinal.train, -Demented)
+trainy <- longitudinal.train$Demented
+
+rf <- randomForest(Demented ~., data = longitudinal.train, ntree = 5000, mtry = sqrt(p), importance = TRUE)
+err.df <- data.frame(x=1:5000, err = rf$err.rate[,1]) 
+
+ggplot(err.df, aes(x=x)) + 
+  geom_line(aes(y = err)) + 
+  labs(x = "Iteration", y = "Out-Of-Bag error estimate") + 
+  theme_minimal()
+```
+
+We see that 5000 trees is enough as the OOB error estimate stabilizes and it is not too slow to fit the model. Now we choose a value for $m$. We fit 10 models for each $m \in \{1,...,12\}$ and compare the average OOB error for all values of $m$. Seeing as the amount of predictors is small enough so it is computationally feasible. 
+
+```{r}
+set.seed(1338)
+B = 5000
+oob.df <- data.frame(m = 1:p, oob.err = rep(0,p))
+
+for (m in 1:p){
+  oob_err_m <- matrix(nrow = 10, ncol = B)
+  for (i in 1:10) {
+    model <- randomForest(Demented ~., data = longitudinal.train,
+                        mtry = m, ntree = B)
+    oob_err_m[i] <- model$err.rate[B,1]
+  }
+  oob.df$oob.err[m] <- colMeans(oob_err_m) # save oob error
+}
+
+m <- oob.df$m[which.min(oob.df$oob.err)] # save best m value
+
+ggplot(data = oob.df, aes(x = m)) + 
+  geom_line(aes(y = oob.err)) + 
+  geom_point(aes(y = oob.err), shape = 21, colour = "black", fill = "white", size = 2.8 ) +
+  scale_x_continuous(breaks = seq(1,p,2)) +
+  labs(x = "m", y = "OOB error")
+```
+From 10 runs, a value of gamma = 0.01 and cost = 100 produced the best results 6 times.
+
+Here we see that the best value for $m$ is $m = $ `r m`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r m` randomly chosen predictors. 
+
+
+### SVM
+
+```{r}
+summary(longitudinal.train)
+st.long.train <- longitudinal.train
+# Standardize/normalize all the numeric features
+st.long.train[,2:12] <- scale(st.long.train[,2:12]) 
+summary(st.long.train)
+```
+We run an initial test using the linear and radial kernel's under default parameters and test their accuracy on the training set with 10-fold CV.
+```{r}
+set.seed(58008)
+# Linear kernel
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cross=10)
+summary(lin.svm)
+# Radial kernel
+rad.svm <-svm(Demented~.,data=st.long.train,kernel="radial",cross=10)
+summary(rad.svm)
+```
+Both kernels perform decent, with accuracy > 75%. The linear kernel performs slightly better
+under deafult choice of parameters. 
+
+C is the only tuning parameter for a linear kernel, so we start there.
+Here we will perform 15 iterations testing values of C in [10^-4 , 10^3] (by orders of magnitude).
+For each run, we will choose the best C. 
+```{r}
 set.seed(58008)
 # Testing accuracy for different costs "C" 
 # We'll do multiple passes with k-fold CV using the training data. 
 # Range of costs, by orders of magnitude (C=10^4 results in max iteration problems)
-
 # Linear kernel
 C = 10^(-4:3)
 best_cost_lin = c()
@@ -153,7 +582,6 @@ for (j in 1:15) {
   index <- which.max(accuracy)
   best_cost_lin <- c(best_cost_lin,C[index])
 }
-
 tab <- table(best_cost_lin)
 y <- names(tab)
 x <- as.numeric(tab)
@@ -161,9 +589,7 @@ barplot(x, names.arg = y, ylab = "Frequency", xlab = "Cost")
 ``` 
 A cost of 1 seems to be most prevalent after 15 runs.
 
-A SVM with a radial kernel also has a tuning parameter gamma. Gamma is closely
-related to the curvature of the seperating boundary, or the "stiffness" of it.
-Here we need to test with both gamma and cost simultaneously as these parameters are correlated.
+For the radial kernel, we tune gamma and cost simultaneously as these parameters are correlated.
 The e1071 library has a built-in tune function which performs this analysis.
 We'll do 10 iterations, with gamma in [10^-4,10^3] and cost in [10^-4,10^3]. For each iteration, we choose the best pair.
 ```{r}
@@ -202,41 +628,106 @@ The SVM with linear kernel remains unaffected, as a cost of 1 was the default pa
 The SVM with radial kernel has approved in accuracy by approx 5% through tuning.
 (I wouldn't say the results are conclusive in determining which model is best)
 
+### Cross-validation for final model selection
+
+Now we employ 5-fold CV to get an estimate for the test error using our selected three "best" instances of the different classifiers.
+
 This section is about how the SVM performs when only considering deltas/removing deltas.
 First we need to create two new training sets from the data set. One using categorical variables and deltas, 
 and one using categorical variables without deltas.
 ```{r}
-# Dataframes with only deltas
-set.seed(58008)
-deltas.long <- baseline_with_deltas %>% na.omit() %>% select(c(M.F,dAge,dASF,deTIV,dMMSE,dnWBV,Demented)) 
-deltas.index <- sample(1:nrow(deltas.long), floor(.75 * nrow(deltas.long)))
-deltas.train <- deltas.long[deltas.index,]
+set.seed(1337)
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
 
-# Dataframes without deltas
-nodelt.long <- baseline_with_deltas %>% select(c(M.F,Age,ASF,eTIV,MMSE,nWBV,Demented)) %>% na.omit()
-nodelt.index <- sample(1:nrow(nodelt.long), floor(.75 * nrow(nodelt.long)))
-nodelt.train <- nodelt.long[nodelt.index,]
+#make 5 folds
+n.fold = 5
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=n.fold,labels=FALSE)
 
-# Normalize new training sets
-deltas.train[,2:6] <- scale(deltas.train[,2:6]) 
-nodelt.train[,2:6] <- scale(nodelt.train[,2:6])
+cv_err.df <- data.frame(fold = 1:n.fold, logistic_err = rep(0,n.fold),
+                        rf_err = rep(0,n.fold), svm_err = rep(1,n.fold))
+
+for(i in 1:n.fold){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    
+    N <- length(test.data$Demented)
+    rf <- randomForest(Demented ~. , data = train.data, mtry = m, ntree = B) # fit random forest
+    cv_err.df$rf_err[i] <- sum(predict(rf, newdata = test.data) != test.data$Demented) / N
+    
+    logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial) # fit logistic
+    cv_err.df$logistic_err[i] <- sum((predict(logistic, newdata = test.data) > .5) != test.data$Demented) / N
+    
+    svm.model <- svm(Demented~.,data= train.data ,kernel="radial",gamma=1e-02,cost=1e+02,cross=10) # fit svm
+    cv_err.df$svm_err[i] <- sum(predict(svm.model, newdata = test.data) != test.data$Demented) / N
+}
+
+cv_err <- cv_err.df %>%
+  select(-c("fold")) %>%
+  colMeans()
+
+cv_err
 ```
 
-We'll do one SVM call for each training set, using default parameters.
+We see that the logistic regression model scores the lowest CV-error of our three models. Thus we choose the logistic model to perform model assessment on the test data. This emulates real-world efficacy as all test observations were left out of the model-selection process. 
+
+### Model assessment
+
+We now perform model assessment by classifying the observations from the test set using the logistic regression model and comparing the results to the true classifications. 
+
 ```{r}
-set.seed(58008)
+pred.probs <- predict(longitudinal.logistic, newdata = longitudinal.test)
+predictions <- pred.probs > .5 # use 0.5 cutoff for logistic
+# generate confusion table for model on test data
+confusion <- table(predictions, longitudinal.test$Demented)
+rownames(confusion) <- c('pred 0','pred 1')
+colnames(confusion) <- c('true 0','true 1')
+# sensitivity and specificity
+sens <- confusion[2,2] / sum(confusion[,2])
+spec <- confusion[1,1] / sum(confusion[,1])
+# misclassification error
+misc <- (confusion[2,1] + confusion[1,2]) /
+  sum(confusion)
+#accuracy vector
+sens_spec_misc <- data.frame(Sensitivity = sens, Specificity = spec, Misclass_Rate = misc)
 
-# Default parameters: RBF-kernel, C = 1, gamma = 1/(no. of features), C-classification
+confusion
 
-# Data with only categorical variables and deltas
-deltas.svm <- svm(Demented~., data=deltas.train,cross=10)
-print("Data with only deltas: ")
-print(deltas.svm[29])
+sens_spec_misc
+```
 
-# Data with only categorical variables and without deltas
-nodelt.svm <- svm(Demented~., data=nodelt.train,cross=10)
-print("Data without deltas")
-print(nodelt.svm[29])
-``` 
 
-# Summary
+
+### Caveats
+
+#### MMSE as a Feature
+
+We chose to include MMSE, which could be contentious. While it is objective in its evaluation, it is typically done by a medical professional. Despite this, we determined that since it is objective and simple, it is reasonable to include it. Some examples of assessment questions that it includes are "what floor are we on?", "what year is it?", and "spell the word "world" backwards." Since these questions are simple and objective enough to be run by a computerized test, it seems reasonable to use them in our project, withstanding the fact that our project aims to reduce the role of human decision making in the medical field (or at least make it easier). 
+
+#### Real-World Use Case
+
+Our model selection did not include an loss function that was complicated enough to select for a particular sensitivity or specificity, but this would be desirable for our project. Ideally, our model would be used to screen out patients who definitely do not have Alzheimer's, which would result in a reduced role for medical professionals. This means that we would prioritize a high (specificity/sensitivity) as opposed to a high (sensitivity/specificity). In a future version of this project, we would search for a loss function that punished false negatives more than other errors. In this sense, we are aiming to make our test similar to the method of how HIV testing is run: 
+
+> A blood sample from the patient is taken. First this is run through a cheap test (ELISA) that has a tremendously high sensitivity, but a low specificity. If the test is negative, no further testing is necessary and the patient is informed that they do not have HIV. If the test is positive, an expensive but accurate second "gold standard" test (western blot) is performed that has both a high sensitivity and specificity. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient.
+
+We did not achieve a model that would work for this logic of testing since our sensitivity was too low. However, supposing a future version of this model could achieve a sufficiently high sensitivity, a procedure for diagnosing Alzheimer's could follow the same logic with out statistical model replacing ELISA, and professional medical diagnosis replacing the western blot test. Thus the logic for a medical diagnosis procedure would go as follows:
+
+> An MRI and MMSE of the patient are taken. First this is run through a statistical model with high specificity. If the test is negative, no further testing is necessary and the patient is informed that they do not have dementia. If the test is positive, a medical professional will act as the second and final "gold standard" test, diagnosing the patient based on the the data and a followup visit if deemed necessary by the medical professional. The second test is done before informing the patient of the results of the first test. After this step, the results of the second test are shared with the patient, and treatment can occur as necessary. 
+
+
+## Summary
+
+
+
+
+
+
+
+
+
+
+
+
