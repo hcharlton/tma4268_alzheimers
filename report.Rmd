@@ -51,6 +51,8 @@ library("pROC")
 library("cvAUC")
 library('webshot')
 library('boot')
+library('e1071')
+library('caret')
 ```
 
 
@@ -441,6 +443,10 @@ sens_spec_misc
 
 
 ### Random forest
+
+We proceed by fitting a Random Forest to the training set and tune the parameters to find the "best" instance of a Random Forest classifier. First we consider the number of trees in the forest, $B$. We fit a random forest and plot the cumulative OOB error. 
+
+
 ```{r}
 set.seed(1337)
 
@@ -459,6 +465,7 @@ ggplot(err.df, aes(x=x)) +
   labs(x = "Iteration", y = "Out-Of-Bag error estimate") + 
   theme_minimal()
 ```
+
 We see that 5000 trees is enough as the OOB error estimate stabilizes and it is not too slow to fit the model. Now we choose a value for $m$. We do this by computing the OOB error estimate for $m \in \{1,...,12\}$ as the amount of predictors is small enough so it is computationally feasible. 
 
 
