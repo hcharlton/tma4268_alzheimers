@@ -255,13 +255,6 @@ The "e1071" package in R has a svm function.
 It can also perform k-fold CV on the data which returns an accuracy metric which we will use to tune the model parameters.
 The accuracy is a perecentage score of how many predictions were correctly classified from CV.
 
-[how does it work] v
-[strengths] 
-[weaknesses]
-[applicability for this project]
-[potential limitations]
-[how are we tuning this model] v
-
 
 ### Model Selection 
 To select a model we need to consider all possible classification methods within our selected scope that includes random forests, logistic, and SVM. Following this we then make a decision based on some measure of goodness-of-fit. For this measure we chose the misclassification rate. We primarily used this to compute a cross-validated error estimate for one model of each classification method once the "best" instance of our three classification methods had been chosen. The selection of the "best" instance of each classifier varies depending on the model type, and is discussed in the methods section of each model type. Rather than compare all model types at each step, we have chosen to only compare model instances within each classifier, only comparing the selected "best" instances of different model classifier types at the final step. This vastly reduces the size of the search space and thus decreases the computation to a reasonable level. A graphical representation of our model selection algorithm is shown below.
@@ -537,33 +530,34 @@ ggplot(data = oob.df, aes(x = m)) +
   labs(x = "m", y = "OOB error")
 ```
 
-Here we see that the best value for $m$ is $m = $ `r m`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r m` randomly chosen predictors. 
+Here we see that the best value for $m$ is $m =$ `r m`. Thus our best fit of a random forest uses $B = 5000$ trees and $m =$ `r m` randomly chosen predictors. 
 
 
 ### SVM
+We now fit a Support Vector Machine to the training data. To start, we stardardize the training observations.
 
 ```{r}
-summary(longitudinal.train)
 st.long.train <- longitudinal.train
 # Standardize/normalize all the numeric features
 st.long.train[,2:12] <- scale(st.long.train[,2:12]) 
-summary(st.long.train)
 ```
-We run an initial test using the linear and radial kernel's under default parameters and test their accuracy on the training set with 10-fold CV.
+
+We run an initial test using the linear and radial kernels under default parameters and test their accuracy on the training set with 10-fold CV. The accuracy is printed for the linear kernel then the radial kernel.
+
 ```{r}
 set.seed(58008)
 # Linear kernel
 lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cross=10)
-summary(lin.svm)
+print(lin.svm$tot.accuracy)
 # Radial kernel
 rad.svm <-svm(Demented~.,data=st.long.train,kernel="radial",cross=10)
-summary(rad.svm)
+print(rad.svm$tot.accuracy)
 ```
-Both kernels perform decent, with accuracy > 75%. The linear kernel performs slightly better
-under default choice of parameters. 
+
+Both kernels perform decent, with accuracy > 75%. The linear kernel performs slightly better under default choice of parameters. 
 
 C is the only tuning parameter for a linear kernel, so we start there.
-Here we will perform 15 iterations testing values of C in [10^-4 , 10^3] (by orders of magnitude).
+Here we will perform 15 iterations testing values of C in $[10^{-4} , 10^3]$ (by orders of magnitude).
 For each run, we will choose the best C. 
 ```{r}
 set.seed(58008)
@@ -587,13 +581,13 @@ y <- names(tab)
 x <- as.numeric(tab)
 barplot(x, names.arg = y, ylab = "Frequency", xlab = "Cost")
 ``` 
-A cost of 1 seems to be most prevalent after 15 runs.
+A cost of 1000 seems to be most prevalent after 15 runs.
 
 For the radial kernel, we tune gamma and cost simultaneously as these parameters are correlated.
 The e1071 library has a built-in tune function which performs this analysis.
-We'll do 10 iterations, with gamma in [10^-4,10^3] and cost in [10^-4,10^3]. For each iteration, we choose the best pair.
+We'll do 10 iterations, with gamma in $[10^{-4},10^3]$ and cost in $[10^{-4},10^3]$. For each iteration, we choose the best pair.
 ```{r}
-set.seed(58008)
+set.seed(58018)
 # 10 runs with 10-fold CV. Selecting the best combination of gamma and C
 # in each iteration.
 gammas <- c()
@@ -609,22 +603,22 @@ for (i in 1:10) {
 tab <- table(gammas,costs)
 print(tab)
 ```
-From 10 runs, a value of gamma = 0.01 and cost = 100 produced the best results 6 times.
+From 10 runs, a value of gamma = 0.1 and cost = 10 produced the best results 7 times.
 
 With the paramteres tuned for both kernels, we test their performance against one another.
 ```{r}
 set.seed(58008)
-# Linear kernel, cost = 1
-lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=1,cross=10)
+# Linear kernel, cost = 1000
+lin.svm <- svm(Demented~.,data=st.long.train,kernel="linear",cost=1e+3,cross=10)
 lin_accuracy <- lin.svm[29]
 print(lin_accuracy)
-# Radial kernel, gamma = 0.01, cost = 100
-radial.svm <- svm(Demented~.,data=st.long.train,kernel="radial",gamma=1e-02,cost=1e+02,cross=10)
+# Radial kernel, gamma = 0.1, cost = 10
+radial.svm <- svm(Demented~.,data=st.long.train,kernel="radial",gamma=1e-01,cost=1e+1,cross=10)
 rad_accuracy <- radial.svm[29]
 print(rad_accuracy)
 ```
 Both models have an accuracy of approx. 80%, with the radial kernel outperforming the linear.
-The SVM with linear kernel remains unaffected, as a cost of 1 was the default paramter we began with.
+The accuracy of the SVM with linear kernel has decreased by approx 2%.
 The SVM with radial kernel has approved in accuracy by approx 5% through tuning.
 
 
@@ -660,7 +654,7 @@ for(i in 1:n.fold){
     logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial) # fit logistic
     cv_err.df$logistic_err[i] <- sum((predict(logistic, newdata = test.data) > .5) != test.data$Demented) / N
     
-    svm.model <- svm(Demented~.,data= train.data ,kernel="radial",gamma=1e-02,cost=1e+02,cross=10) # fit svm
+    svm.model <- svm(Demented~.,data= train.data ,kernel="radial",gamma=1e-01,cost=1e+01,cross=10) # fit svm
     cv_err.df$svm_err[i] <- sum(predict(svm.model, newdata = test.data) != test.data$Demented) / N
 }
 
