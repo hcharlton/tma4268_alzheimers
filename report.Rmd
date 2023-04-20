@@ -141,6 +141,115 @@ longitudinal.aic.subsets.plot <-
 ```
 
 
+
+
+
+
+## CV for evaluating the performance of fitting the logistic model, using previously calculated AIC feature set
+
+```{r}
+set.seed(1337)
+#randomize data
+longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
+
+#make n folds
+n <- 5
+folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=n,labels=FALSE)
+
+#vector to store sensititivities
+sens.vec <- c()
+#specificities
+spec.vec <- c()
+#misclassivication errors
+misc.vec <- c()
+# cumulative confusion matrix
+logistic.confusion.cumulative <- matrix(data = c(0,0,0,0), nrow=2,ncol=2)
+
+
+for(i in 1:n){
+    #get test index
+    test.index <- which(folds==i,arr.ind=TRUE)
+    #separate test data and train data 
+    test.data <- longitudinal.train.rand[test.index, ]
+    train.data <- longitudinal.train.rand[-test.index, ]
+    #train best logistic model for training partition
+    logistic.i <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial)
+    #generated predicted probabilities on test partition 
+    logistic.i.probs <- predict(logistic.i, newdata = test.data, type = "response")
+    #convert probabilities to classification based on a P = 0.5 decision threshold
+    logistic.i.pred <- ifelse(logistic.i.probs > 0.5, 1, 0)
+    # generate confusion table for predictions
+    logistic.i.confusion <- table(logistic.i.pred, test.data$Demented)
+    rownames(logistic.i.confusion) <- c('pred 0','pred 1')
+    colnames(logistic.i.confusion) <- c('true 0','true 1')
+    # calculate sensitivity and specificity
+    logistic.sens <- logistic.i.confusion[2,2] / sum(logistic.i.confusion[,2])
+    logistic.spec <- logistic.i.confusion[1,1] / sum(logistic.i.confusion[,1])
+    logistic.misc <- (logistic.i.confusion[2,1] + logistic.i.confusion[1,2]) / sum(logistic.i.confusion)
+    #append accuracy metrics to persistent vectors
+    sens.vec <- c(sens.vec,logistic.sens)
+    spec.vec <- c(spec.vec,logistic.spec)
+    misc.vec <- c(misc.vec, logistic.misc)
+    #add confusion matrix to persistent object
+    logistic.confusion.cumulative <- logistic.i.confusion + logistic.confusion.cumulative
+}
+# compute cumulative sensitivity, specificity and misclassification error accross the folds
+sens.cumulative <- logistic.confusion.cumulative[2,2] / sum(logistic.confusion.cumulative[,2])
+spec.cumulative <- logistic.confusion.cumulative[1,1] / sum(logistic.confusion.cumulative[,1])
+misc.cumulative <- (logistic.confusion.cumulative[2,1] + logistic.confusion.cumulative[1,2]) /
+  sum(logistic.confusion.cumulative)
+
+
+sens_spec_misc <- c(sens.cumulative, spec.cumulative, misc.cumulative)
+sens.vec
+spec.vec
+```
+
+```{r}
+# visualize some things
+sens_spec_misc.df <- data.frame(sens = sens.vec, spec = spec.vec, misc = misc.vec)
+
+logistic.accuracy.plot <- 
+  ggplot(sens_spec_misc.df, aes(x = spec, y = sens))+
+  geom_point(aes(size = misc)) + 
+  labs(size = "Misclassification") +
+  scale_x_reverse() +
+  ggtitle("K-Fold Accuracy Distribution")+
+  labs(x = "Specificity", y = "Sensitivity") +
+  theme_minimal() 
+
+
+logistic.accuracy.plot
+logistic.confusion.cumulative
+sens_spec_misc
+```
+
+
+## Train final model
+```{r}
+# train logistic model on entire training set
+longitudinal.logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = longitudinal.train, family = binomial)
+# extract training probabilities
+longitudinal.logistic.train.probs <- longitudinal.logistic$fitted.values
+# extract training classifications
+longitudinal.logistic.train.preds <- ifelse(longitudinal.logistic.train.probs > 0.5, 1, 0)
+# generate confusion table for model on training data
+longitudinal.logistic.confusion <- table(longitudinal.logistic.train.preds, longitudinal.train$Demented)
+rownames(longitudinal.logistic.confusion) <- c('pred 0','pred 1')
+colnames(longitudinal.logistic.confusion) <- c('true 0','true 1')
+# sensitivity and specificity
+longitudinal.logistic.sens <- longitudinal.logistic.confusion[2,2] / sum(longitudinal.logistic.confusion[,2])
+longitudinal.logistic.spec <- longitudinal.logistic.confusion[1,1] / sum(longitudinal.logistic.confusion[,1])
+# misclassification error
+longitudinal.logistic.misc <- (longitudinal.logistic.confusion[2,1] + longitudinal.logistic.confusion[1,2]) /
+  sum(longitudinal.logistic.confusion)
+#accuracy vector
+sens_spec_misc <- c(longitudinal.logistic.sens, longitudinal.logistic.spec, longitudinal.logistic.misc)
+sens_spec_misc
+```
+
+
+
 ## plotting the master-diagram
 
 ```{r}
@@ -195,167 +304,10 @@ graph TD
 ```
 
 
-## CV for selecting best model with nested feature selection
-
-```{r}
-#randomize data
-longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
-
-#make 10 folds
-folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=10,labels=FALSE)
-
-#cv
-
-AIC.df <- data.frame(variables = 1:13)
-for(i in 1:10){
-    #get test index
-    test.index <- which(folds==i,arr.ind=TRUE)
-    #separate test data and train data 
-    test.data <- longitudinal.train.rand[test.index, ]
-    train.data <- longitudinal.train.rand[-test.index, ]
-    #train model, 
-    train.best.aic <- bestglm(train.data, family = binomial, IC = "AIC", method ="forward")
-    # train.best <- train.best.aic$BestModel
-    #organize useful data of model
-    # train.aic.subsets <- 
-    #   train.best.aic$Subsets %>% 
-    #   data.frame() %>% 
-    #   cbind(variables = 1:nrow(train.best.aic$Subsets))
-    AIC.df <- cbind(AIC.df, i <- train.best.aic$Subsets$AIC)
-    #make df of iterated AIC 
-    }
-
-AIC.df.long <- melt(AIC.df, id.vars = "variables")
-
-ggplot(AIC.df.long, aes(x = value, y = id)) + 
-    geom_point() +
-    facet_wrap(~ variable)
-
-
-longitudinal.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method = "exhaustive")
-logistic.best <- longitudinal.best.aic$BestModel
-
-# get subset table as a dataframe for future use
-longitudinal.aic.subsets <- 
-  longitudinal.best.aic$Subsets %>% 
-  data.frame() %>% 
-  cbind(variables = 1:nrow(longitudinal.best.aic$Subsets))
-# make feature-AIC plot
-longitudinal.aic.subsets.plot <- 
-  ggplot(longitudinal.aic.subsets, aes(x = variables, y = AIC)) +
-  geom_point(color = "red", shape = "X", size = 4) +
-  geom_line(color ='darkcyan') +
-  ggtitle("Longitudinal AIC Subset Selection") +
-  labs(x = "Variables", y = "AIC") +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
-  theme_minimal() 
-
-```
-
-
-## CV for evaluating the performance of fitting the logistic model, using the AIC subset selection on the entire training set
-
-```{r}
-set.seed(4)
-#randomize data
-longitudinal.train.rand <- longitudinal.train[sample(nrow(longitudinal.train)),]
-
-#make n folds
-n <- 5
-folds <- cut(seq(1,nrow(longitudinal.train.rand)),breaks=5,labels=FALSE)
-
-#vector to store sensititivities
-sens.vec <- c()
-#specificities
-spec.vec <- c()
-#misclassivication errors
-misc.vec <- c()
-# cumulative confusion matrix
-logistic.confusion.cumulative <- matrix(data = c(0,0,0,0), nrow=2,ncol=2)
-
-
-for(i in 1:n){
-    #get test index
-    test.index <- which(folds==i,arr.ind=TRUE)
-    #separate test data and train data 
-    test.data <- longitudinal.train.rand[test.index, ]
-    train.data <- longitudinal.train.rand[-test.index, ]
-    #train best logistic model for training partition
-    # train.best.aic <- bestglm(train.data, family = binomial, IC = "AIC", method ="forward")
-    # logistic.i <- longitudinal.best.aic$BestModel
-    logistic.i <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = train.data, family = binomial)
-    #test model on test partition
-    logistic.i.probs <- predict(logistic.i, newdata = test.data, type = "response")
-    #get prediction based on logistic probability output
-    logistic.i.pred <- ifelse(logistic.i.probs > 0.5, 1, 0)
-    # generate confusion table
-    logistic.i.confusion <- table(logistic.i.pred, test.data$Demented)
-    rownames(logistic.i.confusion) <- c('pred 0','pred 1')
-    colnames(logistic.i.confusion) <- c('true 0','true 1')
-    # generate sensitivity and specificity
-    logistic.sens <- logistic.i.confusion[2,2] / sum(logistic.i.confusion[,2])
-    logistic.spec <- logistic.i.confusion[1,1] / sum(logistic.i.confusion[,1])
-    logistic.misc <- (logistic.i.confusion[2,1] + logistic.i.confusion[1,2]) / sum(logistic.i.confusion)
-    #append to persistent vectors
-    sens.vec <- c(sens.vec,logistic.sens)
-    spec.vec <- c(spec.vec,logistic.spec)
-    misc.vec <- c(misc.vec, logistic.misc)
-    logistic.confusion.cumulative <- logistic.i.confusion + logistic.confusion.cumulative
-}
-# compute cumulative sensitivity, specificity and misclassification error accross the folds
-sens.cumulative <- logistic.confusion.cumulative[2,2] / sum(logistic.confusion.cumulative[,2])
-spec.cumulative <- logistic.confusion.cumulative[1,1] / sum(logistic.confusion.cumulative[,1])
-misc.cumulative <- (logistic.confusion.cumulative[2,1] + logistic.confusion.cumulative[1,2]) /
-  sum(logistic.confusion.cumulative)
-
-
-sens_spec_misc <- c(sens.cumulative, spec.cumulative, misc.cumulative)
-spec.vec
-```
-
-```{r}
-# visualize some things
-sens_spec_misc.df <- data.frame(sens = sens.vec, spec = spec.vec, misc = misc.vec)
-
-ggplot(sens_spec_misc.df, aes(x = spec, y = sens))+
-  geom_point(aes(size = misc)) + 
-  labs(size = "Misclassification") +
-  scale_x_reverse() +
-  ggtitle("K-Fold Accuracy Distribution")+
-  labs(x = "Specificity", y = "Sensitivity") +
-  theme_minimal() 
-
-logistic.confusion.cumulative
-sens_spec_misc
-```
-
-
-## Train final model
-```{r}
-longitudinal.logistic <- glm(Demented ~ Age + MMSE + nWBV + dMMSE, data = longitudinal.train, family = binomial)
-longitudinal.logistic.train.probs <- longitudinal.logistic$fitted.values
-longitudinal.logistic.train.preds <- ifelse(longitudinal.logistic.train.probs > 0.5, 1, 0)
-# generate confusion table for model on training data
-longitudinal.logistic.confusion <- table(longitudinal.logistic.train.preds, longitudinal.train$Demented)
-rownames(longitudinal.logistic.confusion) <- c('pred 0','pred 1')
-colnames(longitudinal.logistic.confusion) <- c('true 0','true 1')
-#sensitivity and specificity
-longitudinal.logistic.sens <- longitudinal.logistic.confusion[2,2] / sum(longitudinal.logistic.confusion[,2])
-longitudinal.logistic.spec <- longitudinal.logistic.confusion[1,1] / sum(longitudinal.logistic.confusion[,1])
-# misclassification error
-longitudinal.logistic.misc <- (longitudinal.logistic.confusion[2,1] + longitudinal.logistic.confusion[1,2]) /
-  sum(longitudinal.logistic.confusion)
-#accuracy vector
-sens_spec_misc <- c(longitudinal.logistic.sens, longitudinal.logistic.spec, longitudinal.logistic.misc)
-sens_spec_misc
-```
-
-
 
 ## Introduction: Scope and purpose of your project
 
-The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's.  To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis for the patient which we use as a target variable. While a simple interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. 
+The goal of this project is to develop a model that can classify the diagnosis of dementia, specifically Alzheimer's. To do this we use quantified data from MRI scans and objective psychological tests to form the basis of prediction. Data was found from Kaggle, however the original data was collated by the Open Access Series of Imaging Studies. The dataset includes MRI visits of 150 individuals between the ages of 60 and 96, providing data for several different visits of each patient to an MRI center, at which time a short psychological exam was also taken. In addition to this, the data includes a clinical diagnosis of dementia (either demented or nondemented) for the patient which we use as a target variable. While a simple and interpretable model is desirable, our primary goal is to develop a model that can rule out some patients from further treatment, as this would reduce the load on medical professionals, particularly doctors. As such, our main focus is prediction rather than inference since we are mainly concerned with our ability to emulate the assessment of doctors on these patients. Withdstanding this, we chose a small but diverse set of models: Random forest decision trees, support vector machines, and logistic regression. Within these, logistic regression is by far the most interpretable model, and also is relevant if only for its ongoing use in the medical field. 
 
 
 ## Descriptive data analysis/statistics
