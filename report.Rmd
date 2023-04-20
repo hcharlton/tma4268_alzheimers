@@ -716,7 +716,13 @@ We did not achieve a model that would work for this logic of testing since our s
 
 ## Summary
 
-
+In this report, we analyzed longitudinal data from the OASIS project to investigate the accurate classification of patients as demented or not based on specific features. 
+The process involved data pre-processing, including the exclusion of redundant features and the introduction of new ones to account for longitudinal data. 
+We employed three models, namely logistic regression, random forests, and support vector machines, to predict a patient's demented status using a training set. 
+Feature selection with logistic regression identified Age, MMSE, nWBV, and dMMSE as the best subset with AIC and performed best with CV. For random forests, 5000 trees with 3 random predictors had the lowest OOB error, while SVM with a radial kernel, cost-function of 100, and gamma = 0.01 had the best CV. 
+We matched the three models against one another, where logistic regression and random forests outperformed SVM, with logistic regression being the best of the three based on a 5-fold CV.
+In the end, we tested the logistic regression model on our test data which yielded good prediction accuracy of dementia. 
+The final model scored higher on specificity than sensitivity. This indicates that te model is better suited for screening patients who are demented, as diagnosing patients with dementia comes with a much larger uncertainty.
 
 
 
