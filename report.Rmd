@@ -449,7 +449,7 @@ for (m in 1:p){
                         mtry = m, ntree = B)
     oob_err_m[i] <- model$err.rate[B,1]
   }
-  oob.df$oob.err[m] <- colMeans(cv_err_m) # save oob error
+  oob.df$oob.err[m] <- colMeans(oob_err_m) # save oob error
 }
 
 m <- oob.df$m[which.min(oob.df$oob.err)] # save best m value
@@ -461,7 +461,7 @@ ggplot(data = oob.df, aes(x = m)) +
   labs(x = "m", y = "OOB error")
 ```
 
-Here we see that the best value for $m$ is $m = $ `r oob.df$m[which.min(oob.df$oob.err)]`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r oob.df$m[which.min(oob.df$oob.err)]` randomly chosen predictors. 
+Here we see that the best value for $m$ is $m = $ `r m`. Thus our best fit of a random forest uses $B = 5000$ trees and $m = $ `r m` randomly chosen predictors. 
 
 
 ### SVM
