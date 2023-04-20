@@ -176,7 +176,7 @@ pair_plot
 # show pair plot for delta features
 pair_plot.deltas
 
-?di
+
 boxplots.composite
 ```
 ```{r}
@@ -343,19 +343,21 @@ masterplan
 
 
 ## Model evaluation 
-Once we have selected the best models of the random forest, SVM, and logistic classifiers, we used 5-fold cross validation on the training dataset to select between them. For simplicity we chose a misclassification rate as the loss function. This means that our final model choice is dictated to be the model with the lowest misclassification error rate. Since we are assessing with 5-fold CV, we chose to use the average misclassification error rate of the 5 folds. 
+Once we have selected the best models of the random forest, SVM, and logistic classifiers, we used 5-fold cross validation on the training dataset to select between them. For simplicity we chose a misclassification rate as the loss function. This means that our final model choice is dictated to be the model with the lowest misclassification error rate. Since we are assessing with 5-fold CV, we chose to use the average misclassification error rate of the 5 folds. Additionally, we use sensitivity and specificity as metrics to assess the performance of our models. Below is a summary of their significance and how they were calculated. 
+
+Sensitivity: This represents the probability of classifying an observation as being in the target class, when it truly is in the target class. This is significant for analyzing and predicting how a model will misclassify observations in the future more specifically than just the misclassification error rate. We calculated this by dividing number of observations predicted to be in the target class by the total number of observations genuinely in the target class.
+
+Specificity: This represents the probability of classifying an observation as not being in the target class, when it truly is not in the target class. This is significant for analyzing and predicting how a model will misclassify observations in the future more specifically than just the misclassification error rate. We calculated this by dividing number of observations predicted to not be in the target class by the total number of observations genuinely not in the target class.
+
+Misclassification error rate: This represents the probability of misclassifying an observation, in general. This is the single metric that we use to objectively judge our models' performances. This is calculated simply by dividing the total number of observations that were predicted to be in the wrong class by the total number of observations. 
 
 ## Results and interpretation
-comparison items: 
-[model size] 
-[flexibility] 
-[bias-variance trade-off]
-
 
 ### Logistic regression
 
 #### Select optimal features
-Here we see that the ideal 
+
+Here we see that the ideal AIC subset selection includes features Age, MMSE, nWB, and dMMSE. By performing this features selection we are increasing the bias and decreasing the variance of the model, hopefully leading to a better test set performance.
 ```{r}
 # use AIC to select features
 longitudinal.logistic.best.aic <- bestglm(longitudinal.train, family = binomial, IC = "AIC", method ="forward")
@@ -457,7 +459,7 @@ logistic.accuracy.plot
 logistic.confusion.cumulative
 sens_spec_misc
 ```
-
+Note the above accuracy plot, we can see that over the course of 5 folds the accuracy measures that we chose (sensitivity and specificity) were all above 0.5, so the model is working even on an iterated basis. Additionally, we get a sense of the misclassification error rate. 
 
 
 #### Train final model
@@ -482,7 +484,7 @@ longitudinal.logistic.misc <- (longitudinal.logistic.confusion[2,1] + longitudin
 sens_spec_misc <- c(longitudinal.logistic.sens, longitudinal.logistic.spec, longitudinal.logistic.misc)
 sens_spec_misc
 ```
-
+Note that the final logistic model trained on our entire training set yields quite a nice sensitivity, specificity, and misclassification rate. Obviously we cannot conclude too much from this since it is not iterated, but it means that our model fitting is functioning as it should. 
 
 
 ### Random forest
@@ -558,7 +560,7 @@ rad.svm <-svm(Demented~.,data=st.long.train,kernel="radial",cross=10)
 summary(rad.svm)
 ```
 Both kernels perform decent, with accuracy > 75%. The linear kernel performs slightly better
-under deafult choice of parameters. 
+under default choice of parameters. 
 
 C is the only tuning parameter for a linear kernel, so we start there.
 Here we will perform 15 iterations testing values of C in [10^-4 , 10^3] (by orders of magnitude).
