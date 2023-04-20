@@ -51,6 +51,8 @@ library("pROC")
 library("cvAUC")
 library('webshot')
 library('boot')
+library('e1071')
+library('caret')
 ```
 
 
@@ -441,6 +443,10 @@ sens_spec_misc
 
 
 ### Random forest
+
+We proceed by fitting a Random Forest to the training set and tune the parameters to find the "best" instance of a Random Forest classifier. First we consider the number of trees in the forest, $B$. We fit a random forest and plot the cumulative OOB error. 
+
+
 ```{r}
 set.seed(1337)
 
